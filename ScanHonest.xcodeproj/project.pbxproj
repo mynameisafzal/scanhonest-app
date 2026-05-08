@@ -1,0 +1,794 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7486A85D2FA20A30003EF770 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7486A85C2FA20A30003EF770 /* WidgetKit.framework */; };
+		7486A85F2FA20A30003EF770 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7486A85E2FA20A30003EF770 /* SwiftUI.framework */; };
+		7486A86E2FA20A33003EF770 /* ScanHonestWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7486A85A2FA20A30003EF770 /* ScanHonestWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7486A8782FA211DF003EF770 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7486A8772FA211DF003EF770 /* StoreKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7486A8102FA1FF9D003EF770 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7486A7F82FA1FF9A003EF770 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7486A7FF2FA1FF9A003EF770;
+			remoteInfo = ScanHonest;
+		};
+		7486A81A2FA1FF9D003EF770 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7486A7F82FA1FF9A003EF770 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7486A7FF2FA1FF9A003EF770;
+			remoteInfo = ScanHonest;
+		};
+		7486A86C2FA20A33003EF770 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7486A7F82FA1FF9A003EF770 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7486A8592FA20A30003EF770;
+			remoteInfo = ScanHonestWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7486A8732FA20A33003EF770 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7486A86E2FA20A33003EF770 /* ScanHonestWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		7486A8002FA1FF9A003EF770 /* ScanHonest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScanHonest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7486A80F2FA1FF9D003EF770 /* ScanHonestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScanHonestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7486A8192FA1FF9D003EF770 /* ScanHonestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScanHonestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7486A85A2FA20A30003EF770 /* ScanHonestWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScanHonestWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7486A85C2FA20A30003EF770 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		7486A85E2FA20A30003EF770 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		7486A8772FA211DF003EF770 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7486A86F2FA20A33003EF770 /* Exceptions for "ScanHonestWidget" folder in "ScanHonestWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7486A8592FA20A30003EF770 /* ScanHonestWidgetExtension */;
+		};
+		7486A87A2FA21B91003EF770 /* Exceptions for "ScanHonest" folder in "ScanHonest" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7486A7FF2FA1FF9A003EF770 /* ScanHonest */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		7486A8022FA1FF9A003EF770 /* ScanHonest */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7486A87A2FA21B91003EF770 /* Exceptions for "ScanHonest" folder in "ScanHonest" target */,
+			);
+			path = ScanHonest;
+			sourceTree = "<group>";
+		};
+		7486A8122FA1FF9D003EF770 /* ScanHonestTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ScanHonestTests;
+			sourceTree = "<group>";
+		};
+		7486A81C2FA1FF9D003EF770 /* ScanHonestUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ScanHonestUITests;
+			sourceTree = "<group>";
+		};
+		7486A8602FA20A30003EF770 /* ScanHonestWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7486A86F2FA20A33003EF770 /* Exceptions for "ScanHonestWidget" folder in "ScanHonestWidgetExtension" target */,
+			);
+			path = ScanHonestWidget;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7486A7FD2FA1FF9A003EF770 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7486A8782FA211DF003EF770 /* StoreKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A80C2FA1FF9D003EF770 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8162FA1FF9D003EF770 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8572FA20A30003EF770 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7486A85F2FA20A30003EF770 /* SwiftUI.framework in Frameworks */,
+				7486A85D2FA20A30003EF770 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		7486A7F72FA1FF9A003EF770 = {
+			isa = PBXGroup;
+			children = (
+				7486A8022FA1FF9A003EF770 /* ScanHonest */,
+				7486A8122FA1FF9D003EF770 /* ScanHonestTests */,
+				7486A81C2FA1FF9D003EF770 /* ScanHonestUITests */,
+				7486A8602FA20A30003EF770 /* ScanHonestWidget */,
+				7486A85B2FA20A30003EF770 /* Frameworks */,
+				7486A8012FA1FF9A003EF770 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7486A8012FA1FF9A003EF770 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7486A8002FA1FF9A003EF770 /* ScanHonest.app */,
+				7486A80F2FA1FF9D003EF770 /* ScanHonestTests.xctest */,
+				7486A8192FA1FF9D003EF770 /* ScanHonestUITests.xctest */,
+				7486A85A2FA20A30003EF770 /* ScanHonestWidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7486A85B2FA20A30003EF770 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7486A8772FA211DF003EF770 /* StoreKit.framework */,
+				7486A85C2FA20A30003EF770 /* WidgetKit.framework */,
+				7486A85E2FA20A30003EF770 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7486A7FF2FA1FF9A003EF770 /* ScanHonest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7486A8232FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonest" */;
+			buildPhases = (
+				7486A7FC2FA1FF9A003EF770 /* Sources */,
+				7486A7FD2FA1FF9A003EF770 /* Frameworks */,
+				7486A7FE2FA1FF9A003EF770 /* Resources */,
+				7486A8732FA20A33003EF770 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7486A86D2FA20A33003EF770 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7486A8022FA1FF9A003EF770 /* ScanHonest */,
+			);
+			name = ScanHonest;
+			packageProductDependencies = (
+			);
+			productName = ScanHonest;
+			productReference = 7486A8002FA1FF9A003EF770 /* ScanHonest.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7486A80E2FA1FF9D003EF770 /* ScanHonestTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7486A8262FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestTests" */;
+			buildPhases = (
+				7486A80B2FA1FF9D003EF770 /* Sources */,
+				7486A80C2FA1FF9D003EF770 /* Frameworks */,
+				7486A80D2FA1FF9D003EF770 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7486A8112FA1FF9D003EF770 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7486A8122FA1FF9D003EF770 /* ScanHonestTests */,
+			);
+			name = ScanHonestTests;
+			packageProductDependencies = (
+			);
+			productName = ScanHonestTests;
+			productReference = 7486A80F2FA1FF9D003EF770 /* ScanHonestTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		7486A8182FA1FF9D003EF770 /* ScanHonestUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7486A8292FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestUITests" */;
+			buildPhases = (
+				7486A8152FA1FF9D003EF770 /* Sources */,
+				7486A8162FA1FF9D003EF770 /* Frameworks */,
+				7486A8172FA1FF9D003EF770 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7486A81B2FA1FF9D003EF770 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7486A81C2FA1FF9D003EF770 /* ScanHonestUITests */,
+			);
+			name = ScanHonestUITests;
+			packageProductDependencies = (
+			);
+			productName = ScanHonestUITests;
+			productReference = 7486A8192FA1FF9D003EF770 /* ScanHonestUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		7486A8592FA20A30003EF770 /* ScanHonestWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7486A8702FA20A33003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestWidgetExtension" */;
+			buildPhases = (
+				7486A8562FA20A30003EF770 /* Sources */,
+				7486A8572FA20A30003EF770 /* Frameworks */,
+				7486A8582FA20A30003EF770 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7486A8602FA20A30003EF770 /* ScanHonestWidget */,
+			);
+			name = ScanHonestWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = ScanHonestWidgetExtension;
+			productReference = 7486A85A2FA20A30003EF770 /* ScanHonestWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7486A7F82FA1FF9A003EF770 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2640;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					7486A7FF2FA1FF9A003EF770 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					7486A80E2FA1FF9D003EF770 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 7486A7FF2FA1FF9A003EF770;
+					};
+					7486A8182FA1FF9D003EF770 = {
+						CreatedOnToolsVersion = 26.4.1;
+						TestTargetID = 7486A7FF2FA1FF9A003EF770;
+					};
+					7486A8592FA20A30003EF770 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+				};
+			};
+			buildConfigurationList = 7486A7FB2FA1FF9A003EF770 /* Build configuration list for PBXProject "ScanHonest" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 7486A7F72FA1FF9A003EF770;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7486A8012FA1FF9A003EF770 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7486A7FF2FA1FF9A003EF770 /* ScanHonest */,
+				7486A80E2FA1FF9D003EF770 /* ScanHonestTests */,
+				7486A8182FA1FF9D003EF770 /* ScanHonestUITests */,
+				7486A8592FA20A30003EF770 /* ScanHonestWidgetExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7486A7FE2FA1FF9A003EF770 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A80D2FA1FF9D003EF770 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8172FA1FF9D003EF770 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8582FA20A30003EF770 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7486A7FC2FA1FF9A003EF770 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A80B2FA1FF9D003EF770 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8152FA1FF9D003EF770 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7486A8562FA20A30003EF770 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7486A8112FA1FF9D003EF770 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7486A7FF2FA1FF9A003EF770 /* ScanHonest */;
+			targetProxy = 7486A8102FA1FF9D003EF770 /* PBXContainerItemProxy */;
+		};
+		7486A81B2FA1FF9D003EF770 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7486A7FF2FA1FF9A003EF770 /* ScanHonest */;
+			targetProxy = 7486A81A2FA1FF9D003EF770 /* PBXContainerItemProxy */;
+		};
+		7486A86D2FA20A33003EF770 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7486A8592FA20A30003EF770 /* ScanHonestWidgetExtension */;
+			targetProxy = 7486A86C2FA20A33003EF770 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		7486A8212FA1FF9D003EF770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		7486A8222FA1FF9D003EF770 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		7486A8242FA1FF9D003EF770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = ScanHonest/ScanHonest.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2PX36VRM6F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScanHonest/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScanHonest;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ScanHonest needs camera access to scan your documents.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "ScanHonest uses Face ID to protect your private documents.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ScanHonest needs microphone access for video scanning.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ScanHonest can save scanned documents to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ScanHonest can import images from your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonest;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7486A8252FA1FF9D003EF770 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = ScanHonest/ScanHonest.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2PX36VRM6F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScanHonest/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScanHonest;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ScanHonest needs camera access to scan your documents.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "ScanHonest uses Face ID to protect your private documents.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ScanHonest needs microphone access for video scanning.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "ScanHonest can save scanned documents to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ScanHonest can import images from your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonest;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7486A8272FA1FF9D003EF770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonestTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ScanHonest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ScanHonest";
+			};
+			name = Debug;
+		};
+		7486A8282FA1FF9D003EF770 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonestTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ScanHonest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ScanHonest";
+			};
+			name = Release;
+		};
+		7486A82A2FA1FF9D003EF770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonestUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ScanHonest;
+			};
+			name = Debug;
+		};
+		7486A82B2FA1FF9D003EF770 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonestUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ScanHonest;
+			};
+			name = Release;
+		};
+		7486A8712FA20A33003EF770 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScanHonestWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScanHonestWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonest.ScanHonestWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7486A8722FA20A33003EF770 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScanHonestWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScanHonestWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.afzal.ScanHonest.ScanHonestWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7486A7FB2FA1FF9A003EF770 /* Build configuration list for PBXProject "ScanHonest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7486A8212FA1FF9D003EF770 /* Debug */,
+				7486A8222FA1FF9D003EF770 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7486A8232FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7486A8242FA1FF9D003EF770 /* Debug */,
+				7486A8252FA1FF9D003EF770 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7486A8262FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7486A8272FA1FF9D003EF770 /* Debug */,
+				7486A8282FA1FF9D003EF770 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7486A8292FA1FF9D003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7486A82A2FA1FF9D003EF770 /* Debug */,
+				7486A82B2FA1FF9D003EF770 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7486A8702FA20A33003EF770 /* Build configuration list for PBXNativeTarget "ScanHonestWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7486A8712FA20A33003EF770 /* Debug */,
+				7486A8722FA20A33003EF770 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 7486A7F82FA1FF9A003EF770 /* Project object */;
+}
