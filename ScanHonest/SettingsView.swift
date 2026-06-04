@@ -2,6 +2,7 @@ import SwiftUI
 import StoreKit
 import UserNotifications
 import MessageUI
+import LocalAuthentication
 
 // MARK: - UserPlan
 enum UserPlan { case free, pro }
@@ -13,18 +14,23 @@ struct SettingsView: View {
     @EnvironmentObject var scanLimitManager: ScanLimitManager
 
     // Scanning prefs
-    @AppStorage("autoEnhanceEnabled")  private var autoEnhance    = false
+    @AppStorage("autoEnhanceEnabled")  private var autoEnhance    = true
     @AppStorage("autoCaptureEnabled")  private var autoCapture    = false
     @AppStorage("defaultFormatPDF")    private var defaultFormatPDF = true
 
     // iCloud
     @AppStorage("iCloudSyncEnabled")   private var iCloudEnabled  = false
 
+    // Security
+    @ObservedObject private var lockService = LockService.shared
+
     // Notifications
-    @State private var notificationsEnabled = false
+    @State private var notificationsEnabled  = false
+    @State private var cachedBiometryType: LABiometryType = .none
 
     // UI state
     @State private var showPaywall          = false
+    @State private var paywallTrigger: PaywallView.PaywallTrigger = .protect
     @State private var showDeleteAllConfirm = false
     @State private var showICloudExplainer  = false
     @State private var showWhatsNew         = false
@@ -65,6 +71,7 @@ struct SettingsView: View {
         ZStack {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
+                    settingsHeader
                     accountSection
                     scanningSection
                     notificationsSection
@@ -90,18 +97,15 @@ struct SettingsView: View {
                 .animation(.spring(response: 0.4), value: self.toast != nil)
             }
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Done") { dismiss() }
-                    .foregroundColor(Color("AccentGreen"))
-            }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .onAppear {
+            checkNotificationStatus()
+            resolveBiometryType()
         }
-        .onAppear { checkNotificationStatus() }
         // Sheets & covers
         .fullScreenCover(isPresented: $showPaywall) {
-            PaywallView(triggerContext: .general)
+            PaywallView(triggerContext: paywallTrigger)
         }
         .sheet(isPresented: $showWhatsNew) {
             NavigationStack {
@@ -163,6 +167,22 @@ struct SettingsView: View {
 
     // MARK: - Sections
 
+    private var settingsHeader: some View {
+        HStack {
+            Text("Settings")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(Color("TextPrimary"))
+            Spacer()
+            Button("Done") { dismiss() }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Color("PrimaryGreen"))
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settingsDoneButton")
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 6)
+    }
+
     private var accountSection: some View {
         SettingsSectionView(title: "Account") {
             PromoCardView(
@@ -171,7 +191,7 @@ struct SettingsView: View {
                 lifetimePrice: storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99",
                 onUpgrade: { showPaywall = true }
             )
-            Divider().padding(.leading, 16)
+            Divider()
             if isPro {
                 SettingsRowView(
                     icon: "arrow.up.right.square",
@@ -199,12 +219,11 @@ struct SettingsView: View {
                 .frame(minHeight: 44)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(alignment: .bottom) { Divider().padding(.leading, 44) }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isRestoring)
-
-            Divider().padding(.leading, 44)
+            .accessibilityIdentifier("restorePurchaseButton")
             SettingsValueRowView(
                 icon: "person.crop.circle.badge.checkmark",
                 title: "iCloud Account",
@@ -237,7 +256,7 @@ struct SettingsView: View {
             .frame(minHeight: 44)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(alignment: .bottom) { Divider().padding(.leading, 44) }
+            .background(alignment: .bottom) { Divider() }
 
             ToggleRowView(icon: "wand.and.stars", title: "Auto-enhance", isOn: $autoEnhance)
             ToggleRowView(icon: "viewfinder", title: "Auto-capture",
@@ -283,10 +302,12 @@ struct SettingsView: View {
                 subtitle: iCloudEnabled ? "On — syncing across devices" : "Off — local only",
                 isOn: $iCloudEnabled
             )
+            .accessibilityIdentifier("iCloudToggle")
             .onChange(of: iCloudEnabled) { _, nv in
                 if nv && !isPro {
-                    iCloudEnabled = false
-                    showPaywall = true
+                    iCloudEnabled  = false
+                    paywallTrigger = .iCloudSync
+                    showPaywall    = true
                 } else if nv {
                     showICloudExplainer = true
                 } else {
@@ -322,6 +343,7 @@ struct SettingsView: View {
                 .frame(minHeight: 44)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isClearingCache)
@@ -330,13 +352,23 @@ struct SettingsView: View {
     }
 
     private var privacySection: some View {
-        SettingsSectionView(title: "Privacy") {
+        SettingsSectionView(title: "Privacy & Security") {
             SettingsValueRowView(icon: "cpu",
                                  title: "All processing on your device",
                                  value: "", showsDivider: true)
             SettingsValueRowView(icon: "eye.slash",
                                  title: "We never see your documents",
                                  value: "", showsDivider: true)
+            // Biometric lock toggle — Pro users only; hidden for free users.
+            if isPro {
+                ToggleRowView(
+                    icon:         biometricIcon,
+                    title:        "Require \(biometricLabel) to Open",
+                    subtitle:     "30-second grace period on background",
+                    isOn:         $lockService.biometricLockEnabled,
+                    showsDivider: true
+                )
+            }
             SettingsRowView(
                 icon: "lock.doc",
                 title: "Privacy Policy",
@@ -351,6 +383,22 @@ struct SettingsView: View {
             ) { showTerms = true }
         }
         .padding(.top, 24)
+    }
+
+    /// Called once in onAppear — avoids per-render LAContext allocation.
+    private func resolveBiometryType() {
+        let context = LAContext()
+        var error: NSError?
+        cachedBiometryType = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+            ? context.biometryType : .none
+    }
+
+    private var biometricIcon: String {
+        cachedBiometryType == .faceID ? "faceid" : cachedBiometryType == .touchID ? "touchid" : "lock.fill"
+    }
+
+    private var biometricLabel: String {
+        cachedBiometryType == .faceID ? "Face ID" : cachedBiometryType == .touchID ? "Touch ID" : "Passcode"
     }
 
     private var supportSection: some View {
@@ -659,11 +707,11 @@ struct AboutSheet: View {
                         Link(destination: URL(string: "https://scanhonest.com")!) {
                             AboutLinkRow(icon: "globe", title: "Website")
                         }
-                        Divider().padding(.leading, 44)
+                        Divider()
                         Link(destination: URL(string: "mailto:help@scanhonest.com")!) {
                             AboutLinkRow(icon: "envelope", title: "Contact Us")
                         }
-                        Divider().padding(.leading, 44)
+                        Divider()
                         Link(destination: URL(string: "https://scanhonest.com/privacy")!) {
                             AboutLinkRow(icon: "lock.doc", title: "Privacy Policy")
                         }
@@ -802,6 +850,7 @@ struct PromoCardView: View {
                             .foregroundColor(Color("TextMuted"))
                     }
                     .padding(.horizontal, 16).padding(.vertical, 16)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -839,8 +888,9 @@ struct SettingsRowView: View {
             }
             .frame(minHeight: 44)
             .padding(.horizontal, 16).padding(.vertical, 8)
+            .contentShape(Rectangle())          // full row is tappable, not just visible content
             .background(alignment: .bottom) {
-                if showsDivider { Divider().padding(.leading, 44) }
+                if showsDivider { Divider() }
             }
         }
         .buttonStyle(.plain)
@@ -868,7 +918,7 @@ struct ToggleRowView: View {
         .frame(minHeight: 44)
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(alignment: .bottom) {
-            if showsDivider { Divider().padding(.leading, 44) }
+            if showsDivider { Divider() }
         }
     }
 }
@@ -900,7 +950,7 @@ struct SettingsValueRowView: View {
         .frame(minHeight: 44)
         .padding(.horizontal, 16).padding(.vertical, 8)
         .background(alignment: .bottom) {
-            if showsDivider { Divider().padding(.leading, 44) }
+            if showsDivider { Divider() }
         }
     }
 }
@@ -908,10 +958,7 @@ struct SettingsValueRowView: View {
 struct SettingsIconView: View {
     let systemName: String
     var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 16, weight: .medium))
-            .foregroundColor(Color("AccentGreen"))
-            .frame(width: 20, height: 20)
+        EmptyView()
     }
 }
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import VisionKit
 import PDFKit
 import SwiftData
 import AVFoundation
@@ -14,34 +13,47 @@ struct ScannerView: View {
     @EnvironmentObject var storeKitManager: StoreKitManager
     @Environment(\.modelContext) private var modelContext
 
-    @State private var scannedImages: [UIImage] = []
-    @State private var showReview = false
+    // Wraps captured images with a stable identity so fullScreenCover(item:)
+    // only evaluates its content closure AFTER the item is non-nil — eliminating
+    // the race where fullScreenCover(isPresented:) could snapshot an empty array.
+    private struct CapturedScan: Identifiable {
+        let id = UUID()
+        let images: [UIImage]
+    }
+
+    @State private var capturedScan: CapturedScan?
     // CHANGE 3: permission denied state
     @State private var showPermissionDenied = false
+
+    // Reads the same key that SettingsView writes so the choice is respected here.
+    @AppStorage("autoCaptureEnabled") private var autoCaptureEnabled = false
 
     var body: some View {
         ZStack {
 #if targetEnvironment(simulator)
             SimulatorPlaceholderView(isPresented: $isPresented)
 #else
-            if VNDocumentCameraViewController.isSupported {
-                DocumentCameraView(
-                    scannedImages: $scannedImages,
-                    isPresented: $isPresented
-                ) { images in
-                    scannedImages = images
-                    showReview = true
-                }
-                .ignoresSafeArea()
-            } else {
-                UnsupportedDeviceView(isPresented: $isPresented)
-            }
+            // Both modes use our custom scanner — the only difference is
+            // isAutoCapture: true fires the shutter automatically after stable
+            // detection; false requires the user to tap the green button.
+            // Both share the same green button, flash toggle, and filter cycle.
+            ManualDocumentScannerView(
+                isPresented:   $isPresented,
+                onScan:        { images in capturedScan = CapturedScan(images: images) },
+                isAutoCapture: autoCaptureEnabled
+            )
+            .ignoresSafeArea()
 #endif
         }
-        .fullScreenCover(isPresented: $showReview) {
+        // fullScreenCover(item:) guarantees the closure runs only after capturedScan
+        // is non-nil, so ScanReviewView always receives the real images array.
+        .fullScreenCover(item: $capturedScan) { scan in
             ScanReviewView(
-                images: scannedImages,
-                isPresented: $showReview,
+                images: scan.images,
+                isPresented: Binding(
+                    get: { capturedScan != nil },
+                    set: { if !$0 { capturedScan = nil } }
+                ),
                 onSave: { document in saveDocument(document) }
             )
             .environmentObject(storeKitManager)
@@ -70,7 +82,7 @@ struct ScannerView: View {
         case .authorized:
             break                           // all good — camera will show normally
         case .notDetermined:
-            break                           // VNDocumentCameraViewController will ask
+            break                           // AVCaptureSession will prompt the user
         case .denied, .restricted:
             showPermissionDenied = true     // guide user to Settings
         @unknown default:
@@ -84,47 +96,24 @@ struct ScannerView: View {
         if !storeKitManager.isPro {
             scanLimitManager.recordScan()
         }
+
+        // Flush widget data so the home-screen widget reflects the new scan immediately.
+        // Fetch the 3 most-recent documents after insert for the widget "Recent" list.
+        Task { @MainActor in
+            let descriptor = FetchDescriptor<ScannedDocument>(
+                sortBy: [SortDescriptor(\.dateModified, order: .reverse)]
+            )
+            let recent = (try? modelContext.fetch(descriptor))?.prefix(3) ?? []
+            WidgetDataWriter.shared.flush(
+                scansUsed:  scanLimitManager.scansUsedThisMonth,
+                scansLimit: ScanLimitManager.freeMonthlyLimit,
+                isPro:      storeKitManager.isPro,
+                recentDocs: recent.map { ($0.name, $0.dateModified) }
+            )
+        }
+
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         isPresented = false
-    }
-}
-
-// MARK: - DocumentCameraView (UIViewControllerRepresentable)
-
-struct DocumentCameraView: UIViewControllerRepresentable {
-    @Binding var scannedImages: [UIImage]
-    @Binding var isPresented: Bool
-    let onScan: ([UIImage]) -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIViewController(context: Context) -> VNDocumentCameraViewController {
-        let vc = VNDocumentCameraViewController()
-        vc.delegate = context.coordinator
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {}
-
-    class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
-        let parent: DocumentCameraView
-        init(_ parent: DocumentCameraView) { self.parent = parent }
-
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController,
-                                          didFinishWith scan: VNDocumentCameraScan) {
-            var images: [UIImage] = []
-            for i in 0..<scan.pageCount { images.append(scan.imageOfPage(at: i)) }
-            parent.onScan(images)
-        }
-
-        func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
-            parent.isPresented = false
-        }
-
-        func documentCameraViewController(_ controller: VNDocumentCameraViewController,
-                                          didFailWithError error: Error) {
-            parent.isPresented = false
-        }
     }
 }
 

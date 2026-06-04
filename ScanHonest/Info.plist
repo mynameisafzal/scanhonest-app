@@ -1,5 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+    <!-- Local Network — required for MultipeerConnectivity peer discovery -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>ScanHonest uses your local network to discover and share documents with nearby ScanHonest users on the same Wi-Fi or via Bluetooth.</string>
+
+    <!-- Bonjour service declaration for MultipeerConnectivity -->
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_sh-nearby._tcp</string>
+        <string>_sh-nearby._udp</string>
+    </array>
+
+    <!-- Camera — required for document scanning -->
+    <key>NSCameraUsageDescription</key>
+    <string>ScanHonest uses your camera to scan documents. We don't record video — only the frames you capture.</string>
+
+    <!-- Photo Library — required for Import from Photos -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>ScanHonest accesses your photo library only when you tap Import. We never browse on our own.</string>
+
+    <!-- Face ID — required for document lock feature -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>ScanHonest uses Face ID to protect your locked documents.</string>
+
+    <!-- Launch Screen storyboard name -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+</dict>
 </plist>

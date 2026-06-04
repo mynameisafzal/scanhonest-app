@@ -836,12 +836,14 @@ function ScreenPaywall() {
   return (
     <Phone>
       <div style={{ height: '100%', overflowY: 'auto', padding: '0 20px' }}>
-        {/* Close */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 6 }}>
+        {/* Close — iOS-system-style: filled gray circle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 999, background: 'rgba(60,60,67,0.08)',
+            width: 30, height: 30, borderRadius: 999,
+            background: 'rgba(120,120,128,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>{Icon.close(SH.text, 16)}</div>
+            cursor: 'pointer',
+          }}>{Icon.close(SH.muted, 13)}</div>
         </div>
 
         {/* Header */}
@@ -861,19 +863,32 @@ function ScreenPaywall() {
           </p>
         </div>
 
-        {/* Limit context */}
+        {/* Limit context — scan usage card */}
         <div style={{
-          marginTop: 14, padding: 12, borderRadius: 12,
-          background: SH.bg, border: `1px solid ${SH.hairline}`,
+          marginTop: 14, padding: '12px 14px', borderRadius: 12,
+          background: SH.bg, border: `1px solid rgba(220,53,69,0.2)`,
           fontSize: 13, color: SH.text, lineHeight: 1.4,
         }}>
-          You've used <span style={{ fontFamily: MONO, fontWeight: 700, color: SH.warn }}>5</span> of <span style={{ fontFamily: MONO }}>5</span> free scans this month.
-          <br/>
-          <span style={{ color: SH.muted }}>Resets <span style={{ fontFamily: MONO, color: SH.text }}>May 1, 2026</span> — or upgrade now.</span>
+          {/* Row: label + count */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+            <span style={{ fontSize: 12.5, color: SH.text, fontWeight: 500 }}>Free scans used this month</span>
+            <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 13, color: SH.danger }}>5 / 5</span>
+          </div>
+          {/* Progress bar — full = danger red */}
+          <div style={{ height: 5, borderRadius: 999, background: 'rgba(220,53,69,0.15)', overflow: 'hidden', marginBottom: 8 }}>
+            <div style={{ width: '100%', height: '100%', background: SH.danger, borderRadius: 999 }} />
+          </div>
+          {/* Reset + upgrade CTA */}
+          <div style={{ fontSize: 12, color: SH.muted, lineHeight: 1.5 }}>
+            Resets <span style={{ fontFamily: MONO, color: SH.text, fontWeight: 500 }}>May 1, 2026</span>
+            {' — or '}
+            <span style={{ color: SH.primary, fontWeight: 600 }}>upgrade now</span>
+            {' to scan without limits.'}
+          </div>
         </div>
 
         {/* Pricing — equal weight */}
-        <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+        <div style={{ marginTop: 20, display: 'flex', gap: 10, overflow: 'visible' }}>
           <div style={{
             flex: 1, padding: 14, borderRadius: 16, background: SH.surface,
             border: `2px solid ${SH.primary}`, position: 'relative',
@@ -1247,9 +1262,11 @@ function ScreenWidgets() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SCREEN 10 — SHARE / EXPORT
 // ─────────────────────────────────────────────────────────────
-function ScreenShare() {
+// SCREEN 10B — Native handoff
+// Format picker + Password Protect → hands off to iOS share sheet
+// ─────────────────────────────────────────────────────────────
+function ScreenShareV2() {
   const fmt = (label, sub, active, pro) => (
     <div style={{
       flex: 1, padding: '10px 8px', borderRadius: 12, position: 'relative',
@@ -1263,25 +1280,35 @@ function ScreenShare() {
     </div>
   );
 
-  const dest = (name, color, glyph, pro) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, position: 'relative', flex: 1 }}>
+  const nativeIcon = (name, bg, glyph) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
       <div style={{
-        width: 52, height: 52, borderRadius: 14, background: color,
+        width: 52, height: 52, borderRadius: 12, background: bg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontSize: 18, fontWeight: 700,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+        fontSize: 18, color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
       }}>{glyph}</div>
-      <div style={{ fontSize: 11, color: SH.text, fontWeight: 500 }}>{name}</div>
-      {pro && <div style={{ position: 'absolute', top: -2, right: 6, padding: '0 4px', fontSize: 8, fontFamily: MONO, fontWeight: 700, color: SH.gold, background: SH.goldSoft, borderRadius: 3 }}>PRO</div>}
+      <div style={{ fontSize: 10, color: SH.text, textAlign: 'center', lineHeight: 1.2 }}>{name}</div>
+    </div>
+  );
+
+  const nativeRow = (icon, label) => (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14, padding: '11px 20px',
+      borderBottom: `1px solid rgba(60,60,67,0.06)`, fontSize: 14, color: SH.text,
+    }}>
+      <div style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(60,60,67,0.08)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{icon}</div>
+      {label}
     </div>
   );
 
   return (
     <Phone>
-      {/* dim background */}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,20,17,0.4)', zIndex: 1 }} />
-      {/* faux library underneath */}
-      <div style={{ position: 'absolute', inset: 0, padding: '14px 20px', filter: 'blur(2px)', opacity: 0.5 }}>
+      {/* dim overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,20,17,0.45)', zIndex: 1 }} />
+
+      {/* blurred library bg */}
+      <div style={{ position: 'absolute', inset: 0, padding: '14px 20px', filter: 'blur(2px)', opacity: 0.4 }}>
         <div style={{ height: 22, width: 140, background: SH.surface, borderRadius: 6 }} />
         <div style={{ marginTop: 14, height: 60, background: SH.surface, borderRadius: 12 }} />
         <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1289,60 +1316,301 @@ function ScreenShare() {
         </div>
       </div>
 
-      {/* sheet */}
+      {/* ── Native iOS share sheet (bottom layer) ── */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5,
-        background: SH.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        padding: '12px 20px 28px', maxHeight: '85%', overflowY: 'auto',
-        boxShadow: '0 -10px 40px rgba(0,0,0,0.15)',
+        background: 'rgba(242,242,247,0.96)', backdropFilter: 'blur(20px)',
+        borderTopLeftRadius: 16, borderTopRightRadius: 16,
+        height: 238, overflow: 'hidden',
+        boxShadow: '0 -2px 16px rgba(0,0,0,0.10)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-          <div style={{ width: 38, height: 4, borderRadius: 999, background: 'rgba(60,60,67,0.18)' }} />
-        </div>
-
-        {/* header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 4px 14px' }}>
-          <DocThumb pages={8} style={{ width: 44, height: 56 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Lease_Agreement_2026</div>
-            <div style={{ fontSize: 12, color: SH.muted, fontFamily: MONO, marginTop: 2 }}>8 pages · 2.4 MB</div>
+        {/* App icons row */}
+        <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid rgba(60,60,67,0.10)' }}>
+          <div style={{ fontSize: 10, color: '#6C757D', textAlign: 'center', marginBottom: 10,
+            fontFamily: MONO, letterSpacing: 0.3, textTransform: 'uppercase' }}>iOS Share Sheet</div>
+          <div style={{ display: 'flex', gap: 0 }}>
+            {nativeIcon('AirDrop',  '#0a84ff', '◎')}
+            {nativeIcon('Messages', '#34c759', '✉')}
+            {nativeIcon('Mail',     '#1c8aff', '@')}
+            {nativeIcon('Notes',    '#ffcc00', '✎')}
+            {nativeIcon('Files',    '#3a8dff', '📁')}
           </div>
-          <div style={{
-            width: 30, height: 30, borderRadius: 999,
-            background: 'rgba(60,60,67,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>{Icon.close(SH.text, 14)}</div>
+        </div>
+        {/* Action rows */}
+        {nativeRow('⊕', 'Copy to Clipboard')}
+        {nativeRow('↙', 'Save to Files')}
+        {nativeRow('🖨', 'Print')}
+      </div>
+
+      {/* ── Our prep sheet (top layer — owns format + encryption) ── */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 232, zIndex: 10,
+        background: SH.bg, borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        padding: '10px 20px 18px',
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.16)',
+      }}>
+        {/* drag handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(60,60,67,0.18)' }} />
         </div>
 
-        {/* Format selector */}
-        <div style={{ fontSize: 11, fontFamily: MONO, color: SH.muted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>FORMAT</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+        {/* doc header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12,
+          borderBottom: `1px solid ${SH.hairline}`, marginBottom: 12 }}>
+          <DocThumb pages={8} style={{ width: 40, height: 52 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis' }}>Lease_Agreement_2026</div>
+            <div style={{ fontSize: 11, color: SH.muted, fontFamily: MONO, marginTop: 2 }}>8 pages · 2.4 MB · PDF</div>
+          </div>
+          <div style={{ width: 28, height: 28, borderRadius: 999, background: 'rgba(60,60,67,0.08)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {Icon.close(SH.muted, 13)}
+          </div>
+        </div>
+
+        {/* Format chips */}
+        <div style={{ fontSize: 10, fontFamily: MONO, color: SH.muted, letterSpacing: 0.5,
+          textTransform: 'uppercase', marginBottom: 7 }}>Format</div>
+        <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
           {fmt('PDF', 'default', true)}
           {fmt('JPEG', 'images', false)}
           {fmt('TXT', 'OCR text', false, true)}
           {fmt('PDF·sm', 'compact', false)}
         </div>
 
-        {/* Destinations */}
-        <div style={{ fontSize: 11, fontFamily: MONO, color: SH.muted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12 }}>SEND TO</div>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
-          {dest('AirDrop', '#0a84ff', '◎')}
-          {dest('Messages', '#34c759', '✉')}
-          {dest('Mail', '#1c8aff', '@')}
-          {dest('WhatsApp', '#25d366', 'W')}
+        {/* Password protect row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 12px', background: SH.surface, borderRadius: 12,
+          border: `1px solid ${SH.hairline}`, marginBottom: 14,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {Icon.lock(SH.primary, 15)}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: SH.text }}>Password Protect</div>
+              <div style={{ fontSize: 10, color: SH.muted, fontFamily: MONO }}>AES-256 encryption</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ fontSize: 7.5, fontFamily: MONO, color: SH.gold, fontWeight: 700,
+              letterSpacing: 0.3, padding: '2px 5px', background: SH.goldSoft, borderRadius: 3 }}>PRO</div>
+            {/* toggle off */}
+            <div style={{ width: 42, height: 24, borderRadius: 12, background: 'rgba(60,60,67,0.14)',
+              position: 'relative', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', left: 2, top: 2, width: 20, height: 20,
+                borderRadius: 10, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
-          {dest('Drive', '#fbbc04', 'G', true)}
-          {dest('Dropbox', '#0061ff', 'D', true)}
-          {dest('Notes', '#ffcc00', '✎')}
-          {dest('Files', '#3a8dff', '📁')}
+
+        {/* Primary Share CTA — hands off to native */}
+        <div style={{
+          height: 50, borderRadius: 25, background: SH.primary,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+          color: '#fff', fontSize: 16, fontWeight: 600,
+          boxShadow: `0 4px 16px rgba(27,67,50,0.35)`,
+        }}>
+          {Icon.share('#fff', 17)}
+          Share via iOS…
+        </div>
+        <div style={{ fontSize: 10, color: SH.muted, textAlign: 'center', marginTop: 7,
+          fontFamily: MONO, letterSpacing: 0.2 }}>opens iOS share sheet ↓</div>
+      </div>
+    </Phone>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SCREEN 11B-A — IMPORT CHOICE POPUP
+// Bottom sheet: user picks source for import
+// ─────────────────────────────────────────────────────────────
+function ScreenImportChoicePopup() {
+  const Option = ({ icon, title, sub }) => (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+      background: SH.surface, borderRadius: 14,
+      border: `1px solid ${SH.hairline}`,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+    }}>
+      <div style={{
+        width: 44, height: 44, borderRadius: 12, background: SH.accentSoft,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 20, flexShrink: 0,
+      }}>{icon}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: SH.text }}>{title}</div>
+        <div style={{ fontSize: 12, color: SH.muted, fontFamily: MONO, marginTop: 2 }}>{sub}</div>
+      </div>
+      <div style={{ fontSize: 18, color: SH.primary, opacity: 0.5 }}>›</div>
+    </div>
+  );
+
+  return (
+    <Phone>
+      {/* dim overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1 }} />
+      {/* sheet */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10,
+        background: SH.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        padding: '10px 20px 32px',
+      }}>
+        {/* drag handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(60,60,67,0.18)' }} />
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.4, marginBottom: 4 }}>Import Document</div>
+        <div style={{ fontSize: 13, color: SH.muted, marginBottom: 20 }}>Choose your source</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Option icon="🖼" title="Camera Roll" sub="JPEG · HEIC · PNG" />
+          <Option icon="📄" title="Files App" sub="PDF · images · any document" />
         </div>
 
         <div style={{
-          height: 50, borderRadius: 25, border: `1px solid ${SH.hairline}`,
-          background: SH.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          fontSize: 14, fontWeight: 500, color: SH.primary,
+          marginTop: 16, height: 50, borderRadius: 25,
+          background: 'rgba(60,60,67,0.07)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, fontWeight: 500, color: SH.muted,
+        }}>Cancel</div>
+      </div>
+    </Phone>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SCREEN 11B-B — PRO OCR POPUP
+// Shown when a free user taps OCR — upgrade prompt
+// ─────────────────────────────────────────────────────────────
+function ScreenOCRProPopup() {
+  const Feature = ({ label }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {Icon.check(SH.accent, 16)}
+      <div style={{ fontSize: 14, color: SH.text }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <Phone>
+      {/* dim overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1 }} />
+      {/* sheet */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10,
+        background: SH.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        padding: '10px 24px 36px',
+      }}>
+        {/* drag handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(60,60,67,0.18)' }} />
+        </div>
+
+        {/* icon + badge */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 18 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16, background: SH.accentSoft,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            {Icon.text(SH.primary, 28)}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 6,
+              padding: '3px 8px', background: SH.goldSoft, borderRadius: 999,
+              fontSize: 10, fontFamily: MONO, color: SH.gold, fontWeight: 700, letterSpacing: 0.5,
+            }}>★ PRO FEATURE</div>
+            <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.4, color: SH.text, lineHeight: 1.2 }}>
+              Extract Text (OCR)
+            </div>
+            <div style={{ fontSize: 13, color: SH.muted, marginTop: 4, lineHeight: 1.4 }}>
+              Search inside your docs, copy text, and export as TXT.
+            </div>
+          </div>
+        </div>
+
+        {/* feature list */}
+        <div style={{
+          padding: '14px 16px', background: SH.surface, borderRadius: 14,
+          border: `1px solid ${SH.hairline}`, marginBottom: 20,
+          display: 'flex', flexDirection: 'column', gap: 10,
         }}>
-          More options
+          <Feature label="Search inside any scanned document" />
+          <Feature label="Copy & paste extracted text" />
+          <Feature label="Export as plain .txt file" />
+          <Feature label="Works offline — no cloud needed" />
+        </div>
+
+        {/* CTA */}
+        <div style={{
+          height: 52, borderRadius: 26, background: SH.primary,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 16, fontWeight: 600, color: '#fff',
+          boxShadow: '0 4px 16px rgba(27,67,50,0.3)', marginBottom: 12,
+        }}>Upgrade to Pro — $4.99</div>
+
+        <div style={{
+          textAlign: 'center', fontSize: 14, color: SH.muted, fontWeight: 500,
+        }}>Maybe Later</div>
+      </div>
+    </Phone>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SCREEN 11C — DELETE DOCUMENT POPUP
+// Centered modal confirmation with destructive styling
+// ─────────────────────────────────────────────────────────────
+function ScreenDeletePopup() {
+  return (
+    <Phone>
+      {/* dim overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 28px' }}>
+        <div style={{
+          width: '100%', background: SH.surface, borderRadius: 22,
+          overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
+        }}>
+          {/* top section */}
+          <div style={{ padding: '28px 24px 20px', textAlign: 'center' }}>
+            {/* trash icon in red circle */}
+            <div style={{
+              width: 60, height: 60, borderRadius: 999,
+              background: 'rgba(220,53,69,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="#DC3545" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M10 11v5M14 11v5" stroke="#DC3545" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: SH.text, marginBottom: 6 }}>Delete Document?</div>
+            <div style={{
+              fontSize: 13.5, color: SH.muted, lineHeight: 1.5, padding: '0 8px',
+            }}>
+              <span style={{ fontWeight: 600, color: SH.text }}>Lease_Agreement_2026.pdf</span>
+              {' '}will be permanently removed and cannot be recovered.
+            </div>
+          </div>
+
+          {/* divider */}
+          <div style={{ height: 1, background: SH.hairline }} />
+
+          {/* buttons — stacked */}
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              padding: '16px 24px', textAlign: 'center',
+              fontSize: 16, fontWeight: 600, color: '#DC3545',
+              borderBottom: `1px solid ${SH.hairline}`,
+            }}>Delete Forever</div>
+            <div style={{
+              padding: '16px 24px', textAlign: 'center',
+              fontSize: 16, fontWeight: 500, color: SH.text,
+            }}>Cancel</div>
+          </div>
         </div>
       </div>
     </Phone>
@@ -1352,6 +1620,7 @@ function ScreenShare() {
 Object.assign(window, {
   ScreenOnboard1, ScreenOnboard2, ScreenPermissions, ScreenHome,
   ScreenCamera, ScreenReview, ScreenDocDetail, ScreenPaywall,
-  ScreenPostPurchase, ScreenSettings, ScreenWidgets, ScreenShare,
+  ScreenPostPurchase, ScreenSettings, ScreenWidgets, ScreenShareV2,
+  ScreenImportChoicePopup, ScreenOCRProPopup, ScreenDeletePopup,
   SH, FONT, MONO,
 });

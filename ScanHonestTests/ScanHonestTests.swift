@@ -1,38 +1,17 @@
-//
-//  ScanHonestTests.swift
-//  ScanHonestTests
-//
-//  Created by Afzal on 29/04/26.
-//
-
 import XCTest
 @testable import ScanHonest
 
+// MARK: - ScanHonestTests
+// Root test class — contains only the boilerplate XCTest example methods.
+// All substantive unit tests live in dedicated files:
+//   ScanLimitManagerTests.swift
+//   StorageManagerTests.swift
+//   StoreKitManagerTests.swift
+//   ScannedDocumentTests.swift
+
 final class ScanHonestTests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
     func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
-        // XCTest Documentation
-        // https://developer.apple.com/documentation/xctest
+        XCTAssertTrue(true, "Placeholder — see dedicated test files for real tests")
     }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
-    }
-
 }

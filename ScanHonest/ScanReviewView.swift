@@ -2,39 +2,43 @@ import SwiftUI
 import PDFKit
 
 // MARK: - ScanReviewView
+// ISSUE 3 FIX: .navigationBarBackButtonHidden(true) added so the system never
+// injects a "..." truncated back button when this view's NavigationStack is
+// presented as a fullScreenCover. The custom "← Retake" button is the only
+// back affordance.
 
 struct ScanReviewView: View {
     let images: [UIImage]
     @Binding var isPresented: Bool
     let onSave: (ScannedDocument) -> Void
 
-    @State private var currentPage      = 0
+    @State private var currentPage: Int = 0
     @State private var processedImages: [UIImage]
-    @State private var undoStack:       [[UIImage]]   = []   // history for undo
-    @State private var showSaveSheet    = false
-    @State private var fileName         = ""
-    @State private var selectedFilter: ScanFilter = .original
-    @State private var isSaving         = false
-    @State private var showCropView     = false
+    @State private var undoStack: [[UIImage]] = []
+    @State private var showSaveSheet = false
+    @State private var fileName      = ""
+    @State private var selectedFilter: ScanFilter = .enhanced
+    @State private var isSaving      = false
+    @State private var showCropView  = false
     @EnvironmentObject var storeKitManager: StoreKitManager
 
     enum ScanFilter: String, CaseIterable {
-        case original   = "Color"
-        case grayscale  = "Grayscale"
-        case blackWhite = "B&W"
-        case enhanced   = "Enhanced"
+        case original = "Color"; case grayscale = "Grayscale"
+        case blackWhite = "B&W"; case enhanced = "Enhanced"
     }
 
     init(images: [UIImage], isPresented: Binding<Bool>, onSave: @escaping (ScannedDocument) -> Void) {
-        self.images           = images
-        self._isPresented     = isPresented
-        self.onSave           = onSave
-        self._processedImages = State(initialValue: images)
+        self.images       = images
+        self._isPresented = isPresented
+        self.onSave       = onSave
+        let seed = images.isEmpty ? [UIImage.blankDocumentPlaceholder()] : images
+        self._processedImages = State(initialValue: seed)
     }
 
-    private var canUndo: Bool { !undoStack.isEmpty }
-
-    // MARK: - Body
+    private var safeCurrentPage: Int {
+        guard !processedImages.isEmpty else { return 0 }
+        return min(currentPage, processedImages.count - 1)
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,209 +47,238 @@ struct ScanReviewView: View {
 
                 VStack(spacing: 0) {
 
-                    // ── Main preview ──
+                    // ── Header ─ matches Screen 4 design exactly ─────────────────
+                    // padding: '6px 20px 0'
+                    // LEFT:   Icon.back(primary,18) + "Retake" 15pt/500 gap:4
+                    // CENTER: "Review" 16pt/600 SH.text
+                    // RIGHT:  "Save" pill bg:primary radius:999 14pt/600
+                    // ──────────────────────────────────────────────────────────────
+                    HStack(alignment: .center, spacing: 0) {
+
+                        // LEFT ─ back + "Retake"
+                        Button { isPresented = false } label: {
+                            HStack(spacing: 4) {
+                                Canvas { context, size in
+                                    let s = min(size.width, size.height) / 24
+                                    var p = Path()
+                                    p.move(to:    CGPoint(x: 15*s, y:  5*s))
+                                    p.addLine(to: CGPoint(x:  8*s, y: 12*s))
+                                    p.addLine(to: CGPoint(x: 15*s, y: 19*s))
+                                    context.stroke(p, with: .color(Color("PrimaryGreen")),
+                                                   style: StrokeStyle(lineWidth: 2*s, lineCap: .round,
+                                                                      lineJoin: .round))
+                                }
+                                .frame(width: 18, height: 18)
+
+                                Text("Retake")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(Color("PrimaryGreen"))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("retakeButton")
+
+                        Spacer(minLength: 8)
+
+                        // CENTER ─ "Review" 16pt semibold
+                        Text("Review")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(Color("TextPrimary"))
+
+                        Spacer(minLength: 8)
+
+                        // RIGHT ─ "Save" pill
+                        Button { showSaveSheet = true } label: {
+                            Text("Save")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(Color("PrimaryGreen"))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(processedImages.isEmpty)
+                        .accessibilityIdentifier("saveButton")
+                    }
+                    .padding(.top, 6)
+                    .padding(.horizontal, 20)
+                    .frame(height: 44)
+
                     GeometryReader { geo in
                         ZStack(alignment: .topTrailing) {
-                            TabView(selection: $currentPage) {
-                                ForEach(processedImages.indices, id: \.self) { index in
-                                    Image(uiImage: processedImages[index])
-                                        .resizable()
-                                        .scaledToFit()
-                                        .cornerRadius(12)
-                                        .shadow(color: .black.opacity(0.08), radius: 20, y: 6)
-                                        .shadow(color: .black.opacity(0.04), radius: 8,  y: 2)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 12)
-                                        .tag(index)
+                            if processedImages.isEmpty {
+                                Color("Surface").cornerRadius(12).padding(16)
+                            } else {
+                                TabView(selection: $currentPage) {
+                                    ForEach(processedImages.indices, id: \.self) { index in
+                                        Image(uiImage: processedImages[index])
+                                            .resizable().scaledToFit()
+                                            .cornerRadius(12)
+                                            .shadow(color: .black.opacity(0.08), radius: 20, y: 6)
+                                            .shadow(color: .black.opacity(0.04), radius: 8,  y: 2)
+                                            .padding(.horizontal, 16).padding(.vertical, 12)
+                                            .tag(index)
+                                    }
                                 }
+                                .tabViewStyle(.page(indexDisplayMode: .never))
+                                .frame(width: geo.size.width, height: geo.size.height)
                             }
-                            .tabViewStyle(.page(indexDisplayMode: .never))
-                            .frame(width: geo.size.width, height: geo.size.height)
-
                             if processedImages.count > 1 {
-                                Text("\(currentPage + 1) / \(processedImages.count)")
+                                Text("\(safeCurrentPage + 1) / \(processedImages.count)")
                                     .font(.system(size: 13, weight: .medium, design: .monospaced))
                                     .foregroundColor(Color("TextMuted"))
-                                    .padding(.top, 16)
-                                    .padding(.trailing, 24)
+                                    .padding(.top, 16).padding(.trailing, 24)
                             }
                         }
                     }
 
-                    // ── Page strip ──
                     if processedImages.count > 1 {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(processedImages.indices, id: \.self) { index in
-                                    PageStripThumbnail(
-                                        image: processedImages[index],
-                                        isActive: currentPage == index,
-                                        pageNumber: index + 1
-                                    )
+                                    PageStripThumbnail(image: processedImages[index],
+                                                       isActive: safeCurrentPage == index,
+                                                       pageNumber: index + 1)
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.25)) { currentPage = index }
                                     }
                                 }
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color("Hairline"),
-                                                style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                                        .stroke(Color("Hairline"), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                                         .frame(width: 56, height: 72)
                                     Image(systemName: "plus")
                                         .font(.system(size: 18, weight: .medium))
                                         .foregroundColor(Color("TextMuted"))
                                 }
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 20).padding(.vertical, 8)
                         }
-                        .frame(height: 88)
-                        .background(Color("Background"))
+                        .frame(height: 88).background(Color("Background"))
                     }
 
-                    // ── Filter strip ──
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(ScanFilter.allCases, id: \.self) { filter in
                                 Button(filter.rawValue) { applyFilter(filter) }
-                                    .font(.system(size: 14,
-                                                  weight: selectedFilter == filter ? .semibold : .regular))
-                                    .foregroundColor(selectedFilter == filter
-                                                     ? Color("PrimaryGreen") : Color("TextMuted"))
+                                    .font(.system(size: 14, weight: selectedFilter == filter ? .semibold : .regular))
+                                    .foregroundColor(selectedFilter == filter ? Color("PrimaryGreen") : Color("TextMuted"))
                                     .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(selectedFilter == filter ? Color("AccentSoft") : Color.clear)
                                     .cornerRadius(20)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .stroke(selectedFilter == filter
-                                                    ? Color("AccentGreen") : Color("Hairline"), lineWidth: 1)
-                                    )
+                                    .overlay(RoundedRectangle(cornerRadius: 20)
+                                        .stroke(selectedFilter == filter ? Color("AccentGreen") : Color("Hairline"), lineWidth: 1))
+                                    .accessibilityIdentifier({
+                                        switch filter {
+                                        case .original:   return "filterColor"
+                                        case .grayscale:  return "filterGrayscale"
+                                        case .blackWhite: return "filterBW"
+                                        case .enhanced:   return "filterEnhanced"
+                                        }
+                                    }())
                             }
                         }
                         .padding(.horizontal, 20)
                     }
                     .padding(.vertical, 8)
 
-                    // ── Bottom toolbar ──
-                    VStack(spacing: 0) {
-                        Divider()
-                        HStack(spacing: 0) {
-                            ToolbarActionButton(icon: "crop",            label: "Crop")    { showCropView = true }
-                            ToolbarActionButton(icon: "rotate.right",    label: "Rotate")  { pushUndo(); rotateCurrentPage() }
-                            ToolbarActionButton(icon: "wand.and.stars",  label: "Enhance") { pushUndo(); enhanceCurrentPage() }
-                            ToolbarActionButton(
-                                icon:  canUndo ? "arrow.uturn.backward" : "arrow.uturn.backward",
-                                label: "Undo",
-                                color: canUndo ? Color("TextPrimary") : Color("Hairline")
-                            ) { undoLastChange() }
-                            ToolbarActionButton(icon: "camera.badge.clock", label: "Retake") { retakePage() }
-                        }
-                        .frame(height: 72)
-                        .background(Color("Surface"))
+                    HStack(spacing: 0) {
+                        ToolbarActionButton(icon: .crop,    label: "Crop")    { showCropView = true }
+                            .accessibilityIdentifier("cropButton")
+                        ToolbarActionButton(icon: .rotate,  label: "Rotate")  { pushUndo(); rotateCurrentPage() }
+                            .accessibilityIdentifier("rotateButton")
+                        ToolbarActionButton(icon: .enhance, label: "Enhance", isActive: true) { pushUndo(); enhanceCurrentPage() }
+                            .accessibilityIdentifier("enhanceButton")
+                        ToolbarActionButton(icon: .filter,  label: "Filter")  { applyFilter(.blackWhite) }
+                            .accessibilityIdentifier("filterButton")
+                        ToolbarActionButton(icon: .delete,  label: "Delete")  { deleteCurrentPage() }
+                            .accessibilityIdentifier("deleteButton")
                     }
+                    .padding(.horizontal, 4).padding(.vertical, 12)
+                    .background(Color("Surface")).cornerRadius(18)
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color("Hairline"), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { isPresented = false } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("Retake")
-                                .font(.system(size: 15, weight: .medium))
-                        }
-                        .foregroundColor(Color("PrimaryGreen"))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color("Surface"))
-                        .cornerRadius(20)
-                        .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("Review")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Color("TextPrimary"))
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showSaveSheet = true } label: {
-                        Text("Save")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(Color("PrimaryGreen"))
-                            .cornerRadius(20)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            // Hide the system navigation bar — header is drawn inline above
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarBackButtonHidden(true)
+            // Apply Auto Enhance immediately so the first frame users see is enhanced.
+            .onAppear { applyFilter(.enhanced) }
             .sheet(isPresented: $showSaveSheet) {
-                SaveDocumentSheet(
-                    images: processedImages,
-                    suggestedName: fileName,
-                    isSaving: $isSaving,
-                    onSave: { name, format in saveDocument(name: name, format: format) }
-                )
+                SaveDocumentSheet(images: processedImages, suggestedName: fileName,
+                                  isSaving: $isSaving,
+                                  onSave: { name, format in
+                    saveDocument(name: name, format: format)
+                })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
             .fullScreenCover(isPresented: $showCropView) {
-                CropView(image: processedImages[currentPage]) { cropped in
-                    pushUndo()
-                    processedImages[currentPage] = cropped
-                    selectedFilter = .original
+                if !processedImages.isEmpty {
+                    CropViewControllerRepresentable(
+                        image: processedImages[safeCurrentPage],
+                        isPresented: $showCropView
+                    ) { cropped in
+                        pushUndo()
+                        if safeCurrentPage < processedImages.count {
+                            processedImages[safeCurrentPage] = cropped
+                        }
+                        selectedFilter = .original
+                    }
+                    .ignoresSafeArea()
                 }
             }
         }
     }
 
-    // MARK: - Undo
-
-    private func pushUndo() {
-        undoStack.append(processedImages)
-        // Keep max 10 undo steps to avoid memory bloat
-        if undoStack.count > 10 { undoStack.removeFirst() }
-    }
-
-    private func undoLastChange() {
-        guard let previous = undoStack.popLast() else { return }
-        processedImages = previous
-        selectedFilter  = .original
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    }
-
-    // MARK: - Actions
+    private func pushUndo() { undoStack.append(processedImages); if undoStack.count > 10 { undoStack.removeFirst() } }
 
     private func applyFilter(_ filter: ScanFilter) {
-        pushUndo()
-        selectedFilter  = filter
-        let base = undoStack.last ?? images
-        processedImages = base.map { image in
+        guard !processedImages.isEmpty else { return }
+        pushUndo(); selectedFilter = filter
+        processedImages = images.map { image in
             switch filter {
             case .original:   return image
-            case .grayscale:  return image.applyingGrayscale()    ?? image
+            case .grayscale:  return image.applyingGrayscale()     ?? image
             case .blackWhite: return image.applyingBlackAndWhite() ?? image
             case .enhanced:   return image.applyingAutoEnhance()   ?? image
             }
         }
-        // If undo was pushed just for filter, pop it back and repush with correct base
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func rotateCurrentPage() {
-        let rotated = processedImages[currentPage].rotated(by: 90) ?? processedImages[currentPage]
-        processedImages[currentPage] = rotated
+        guard !processedImages.isEmpty, safeCurrentPage < processedImages.count else { return }
+        processedImages[safeCurrentPage] = processedImages[safeCurrentPage].rotated(by: 90) ?? processedImages[safeCurrentPage]
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     private func enhanceCurrentPage() {
-        guard let enhanced = processedImages[currentPage].applyingAutoEnhance() else { return }
-        processedImages[currentPage] = enhanced
+        guard !processedImages.isEmpty, safeCurrentPage < processedImages.count else { return }
+        guard let enhanced = processedImages[safeCurrentPage].applyingAutoEnhance() else { return }
+        processedImages[safeCurrentPage] = enhanced
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
     private func retakePage() { isPresented = false }
+
+    private func deleteCurrentPage() {
+        guard !processedImages.isEmpty else { return }
+        pushUndo()
+        let idx = safeCurrentPage
+        processedImages.remove(at: idx)
+        if processedImages.isEmpty {
+            // Last page deleted — close review
+            isPresented = false
+        } else {
+            // Keep currentPage in bounds
+            currentPage = min(idx, processedImages.count - 1)
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
 
     private func saveDocument(name: String, format: SaveFormat) {
         isSaving = true
@@ -256,13 +289,9 @@ struct ScanReviewView: View {
             }
             let result        = StorageManager.shared.savePDF(pdfDocument, name: name, thumbnail: processedImages.first)
             let thumbnailData = processedImages.first?.portraitDocumentThumbnail()
-            let document = ScannedDocument(
-                name:          name,
-                pageCount:     processedImages.count,
-                fileSizeBytes: result?.size ?? 0,
-                fileURL:       result?.url,
-                thumbnailData: thumbnailData
-            )
+            let document = ScannedDocument(name: name, pageCount: processedImages.count,
+                                           fileSizeBytes: result?.size ?? 0,
+                                           fileURL: result?.url, thumbnailData: thumbnailData)
             if storeKitManager.isPro, let firstImage = processedImages.first {
                 document.ocrText = try? await OCRProcessor.shared.extractText(from: firstImage)
                 if let text = document.ocrText, document.name == "Scan" {
@@ -272,470 +301,217 @@ struct ScanReviewView: View {
             await MainActor.run {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSave(document)
-                isSaving    = false
-                isPresented = false
+                isSaving = false; isPresented = false
             }
         }
     }
 }
 
-// MARK: - CropView (pixel-accurate UIKit renderer)
-
-struct CropView: View {
-    let image: UIImage
-    let onCrop: (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    // User gesture state
-    @State private var scale:      CGFloat = 1.0
-    @State private var lastScale:  CGFloat = 1.0
-    @State private var offset:     CGSize  = .zero
-    @State private var lastOffset: CGSize  = .zero
-
-    // Screen geometry captured at render time
-    @State private var screenSize:    CGSize = .zero
-    @State private var cropFrameRect: CGRect = .zero  // in screen coords
-
-    private let cropRatio: CGFloat = 0.77  // A4 portrait
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            GeometryReader { geo in
-                let cropW = geo.size.width - 48
-                let cropH = cropW / cropRatio
-                let cropX = (geo.size.width  - cropW) / 2
-                let cropY = (geo.size.height - cropH) / 2
-
-                ZStack {
-                    // Image — fills screen, pan + zoom
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .scaleEffect(scale, anchor: .center)
-                        .offset(offset)
-                        .gesture(
-                            SimultaneousGesture(
-                                MagnificationGesture()
-                                    .onChanged { v in scale = max(1.0, lastScale * v) }
-                                    .onEnded   { _ in lastScale = scale },
-                                DragGesture()
-                                    .onChanged { v in
-                                        offset = CGSize(
-                                            width:  lastOffset.width  + v.translation.width,
-                                            height: lastOffset.height + v.translation.height
-                                        )
-                                    }
-                                    .onEnded { _ in lastOffset = offset }
-                            )
-                        )
-                        .clipped()
-
-                    // Dark overlay outside crop
-                    Color.black.opacity(0.55)
-                        .mask(
-                            Rectangle()
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .frame(width: cropW, height: cropH)
-                                        .blendMode(.destinationOut)
-                                )
-                        )
-                        .allowsHitTesting(false)
-
-                    // Crop border
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.white.opacity(0.9), lineWidth: 1.5)
-                        .frame(width: cropW, height: cropH)
-                        .allowsHitTesting(false)
-
-                    // Corner handles
-                    cropCornerHandles(w: cropW, h: cropH)
-                        .allowsHitTesting(false)
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .onAppear {
-                    screenSize = geo.size
-                    cropFrameRect = CGRect(x: cropX, y: cropY, width: cropW, height: cropH)
-                }
-                .onChange(of: geo.size) { _, newSize in
-                    screenSize = newSize
-                    let w = newSize.width - 48
-                    let h = w / cropRatio
-                    cropFrameRect = CGRect(
-                        x: (newSize.width  - w) / 2,
-                        y: (newSize.height - h) / 2,
-                        width: w, height: h
-                    )
-                }
-            }
-
-            // Top bar
-            VStack {
-                HStack {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(.white)
-                        .padding(20)
-                    Spacer()
-                    Text("Crop")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button("Done") {
-                        let cropped = renderCrop()
-                        onCrop(cropped)
-                        dismiss()
-                    }
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(Color("AccentGreen"))
-                    .padding(20)
-                }
-                Spacer()
-            }
-
-            // Bottom hint
-            VStack {
-                Spacer()
-                Text("Pinch to zoom · Drag to reposition")
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.bottom, 40)
-            }
-        }
-    }
-
-    // MARK: - Pixel-accurate crop renderer
-
-    /// Renders exactly what is visible inside the crop frame at full image resolution.
-    private func renderCrop() -> UIImage {
-        guard screenSize != .zero, cropFrameRect != .zero else { return image }
-
-        let imgW = image.size.width
-        let imgH = image.size.height
-
-        // 1. What scale does the image render at (scaledToFill into screenSize)?
-        let fillScaleX = screenSize.width  / imgW
-        let fillScaleY = screenSize.height / imgH
-        let fillScale  = max(fillScaleX, fillScaleY)   // scaledToFill uses max
-
-        // 2. Rendered image size on screen (before user scale/offset) — used to verify fill scale
-        _ = imgW * fillScale  // renderedW — confirms fill calculation
-        _ = imgH * fillScale  // renderedH — confirms fill calculation
-
-        // 3. Image centre on screen (accounting for user offset + user scale)
-        let centerX = screenSize.width  / 2 + offset.width
-        let centerY = screenSize.height / 2 + offset.height
-
-        // 4. Top-left of rendered image on screen (with user zoom)
-        let totalScale = fillScale * scale
-        let imgLeft = centerX - (imgW * totalScale) / 2
-        let imgTop  = centerY - (imgH * totalScale) / 2
-
-        // 5. Convert crop frame (screen coords) → image pixel coords
-        let pixelX = (cropFrameRect.minX - imgLeft) / totalScale
-        let pixelY = (cropFrameRect.minY - imgTop)  / totalScale
-        let pixelW = cropFrameRect.width  / totalScale
-        let pixelH = cropFrameRect.height / totalScale
-
-        // 6. Clamp to image bounds
-        let clampedX = max(0, min(pixelX, imgW - 1))
-        let clampedY = max(0, min(pixelY, imgH - 1))
-        let clampedW = min(pixelW, imgW - clampedX)
-        let clampedH = min(pixelH, imgH - clampedY)
-
-        guard clampedW > 0, clampedH > 0 else { return image }
-
-        // 7. Scale pixel coords to CGImage resolution
-        let s = image.scale
-        let cgRect = CGRect(
-            x: clampedX * s, y: clampedY * s,
-            width: clampedW * s, height: clampedH * s
-        )
-
-        if let cgImg = image.cgImage?.cropping(to: cgRect) {
-            return UIImage(cgImage: cgImg, scale: image.scale, orientation: image.imageOrientation)
-        }
-        return image
-    }
-
-    @ViewBuilder
-    private func cropCornerHandles(w: CGFloat, h: CGFloat) -> some View {
-        let arm: CGFloat   = 22
-        let thick: CGFloat = 3
-        ZStack {
-            Group {
-                // Top-left
-                Path { p in
-                    p.move(to:    CGPoint(x: -w/2,       y: -h/2 + arm))
-                    p.addLine(to: CGPoint(x: -w/2,       y: -h/2))
-                    p.addLine(to: CGPoint(x: -w/2 + arm, y: -h/2))
-                }.stroke(Color.white, lineWidth: thick)
-                // Top-right
-                Path { p in
-                    p.move(to:    CGPoint(x: w/2 - arm,  y: -h/2))
-                    p.addLine(to: CGPoint(x: w/2,        y: -h/2))
-                    p.addLine(to: CGPoint(x: w/2,        y: -h/2 + arm))
-                }.stroke(Color.white, lineWidth: thick)
-                // Bottom-left
-                Path { p in
-                    p.move(to:    CGPoint(x: -w/2,       y:  h/2 - arm))
-                    p.addLine(to: CGPoint(x: -w/2,       y:  h/2))
-                    p.addLine(to: CGPoint(x: -w/2 + arm, y:  h/2))
-                }.stroke(Color.white, lineWidth: thick)
-                // Bottom-right
-                Path { p in
-                    p.move(to:    CGPoint(x: w/2 - arm,  y:  h/2))
-                    p.addLine(to: CGPoint(x: w/2,        y:  h/2))
-                    p.addLine(to: CGPoint(x: w/2,        y:  h/2 - arm))
-                }.stroke(Color.white, lineWidth: thick)
-            }
+// MARK: - UIImage blank placeholder
+extension UIImage {
+    static func blankDocumentPlaceholder() -> UIImage {
+        let size = CGSize(width: 300, height: 390)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            UIColor(red: 0.97, green: 0.97, blue: 0.97, alpha: 1).setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
         }
     }
 }
 
-// MARK: - ToolbarActionButton (with optional colour override)
+// (CropView removed — replaced by CropViewController.swift / CropViewControllerRepresentable)
 
-struct ToolbarActionButton: View {
-    let icon:   String
-    let label:  String
-    var color:  Color = Color("TextPrimary")
-    let action: () -> Void
+private enum ReviewToolIcon { case crop, rotate, enhance, filter, delete }
 
-    init(icon: String, label: String, color: Color = Color("TextPrimary"), action: @escaping () -> Void) {
-        self.icon   = icon
-        self.label  = label
-        self.color  = color
-        self.action = action
-    }
-
+private struct ToolbarActionButton: View {
+    let icon: ReviewToolIcon; let label: String; var isActive=false; let action: () -> Void
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .light))
-                    .foregroundColor(color)
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(color == Color("TextPrimary") ? Color("TextMuted") : color.opacity(0.7))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11).fill(isActive ? Color("AccentSoft") : Color.clear).frame(width: 38, height: 38)
+                    ReviewToolGlyph(icon: icon, color: isActive ? Color("PrimaryGreen") : Color("TextPrimary"))
+                }
+                Text(label).font(.system(size: 11, weight: isActive ? .semibold : .medium))
+                    .foregroundColor(isActive ? Color("PrimaryGreen") : Color("TextMuted"))
             }
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 56, maxWidth: .infinity)
         }
         .buttonStyle(ReviewPressStyle())
     }
 }
 
-// MARK: - PageStripThumbnail
+private struct ReviewToolGlyph: View {
+    let icon: ReviewToolIcon; let color: Color
+    var body: some View {
+        Canvas { context, size in
+            let s=min(size.width,size.height)/24
+            func pt(_ x:CGFloat,_ y:CGFloat)->CGPoint{CGPoint(x:x*s,y:y*s)}
+            switch icon {
+            case .crop:
+                var p=Path(); p.move(to:pt(6,2));p.addLine(to:pt(6,18));p.addLine(to:pt(22,18));p.move(to:pt(2,6));p.addLine(to:pt(18,6));p.addLine(to:pt(18,22))
+                context.stroke(p,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineCap:.round))
+            case .rotate:
+                var p=Path(); p.addArc(center:pt(12,12),radius:9*s,startAngle:.degrees(35),endAngle:.degrees(335),clockwise:false)
+                p.move(to:pt(21,4));p.addLine(to:pt(21,9));p.addLine(to:pt(16,9))
+                context.stroke(p,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineCap:.round,lineJoin:.round))
+            case .enhance:
+                var p=Path(); p.move(to:pt(12,3));p.addLine(to:pt(13.8,7.5));p.addLine(to:pt(18,9));p.addLine(to:pt(13.8,10.5));p.addLine(to:pt(12,15));p.addLine(to:pt(10.2,10.5));p.addLine(to:pt(6,9));p.addLine(to:pt(10.2,7.5));p.closeSubpath()
+                context.stroke(p,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineJoin:.round))
+            case .filter:
+                context.stroke(Path(ellipseIn:CGRect(x:3*s,y:6*s,width:12*s,height:12*s)),with:.color(color),lineWidth:1.6*s)
+                context.stroke(Path(ellipseIn:CGRect(x:9*s,y:6*s,width:12*s,height:12*s)),with:.color(color),lineWidth:1.6*s)
+            case .delete:
+                // Trash-bin glyph: lid + body + three vertical slots
+                // Lid
+                var lid=Path(); lid.move(to:pt(3,6));lid.addLine(to:pt(21,6))
+                context.stroke(lid,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineCap:.round))
+                // Handle on lid
+                var handle=Path(); handle.move(to:pt(9,6));handle.addLine(to:pt(9,4));handle.addLine(to:pt(15,4));handle.addLine(to:pt(15,6))
+                context.stroke(handle,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineCap:.round,lineJoin:.round))
+                // Body
+                var body=Path(); body.move(to:pt(5,6));body.addLine(to:pt(6,20));body.addLine(to:pt(18,20));body.addLine(to:pt(19,6))
+                context.stroke(body,with:.color(color),style:StrokeStyle(lineWidth:1.6*s,lineCap:.round,lineJoin:.round))
+                // Vertical slots inside
+                var s1=Path(); s1.move(to:pt(9,9));s1.addLine(to:pt(9,17))
+                context.stroke(s1,with:.color(color),style:StrokeStyle(lineWidth:1.3*s,lineCap:.round))
+                var s2=Path(); s2.move(to:pt(12,9));s2.addLine(to:pt(12,17))
+                context.stroke(s2,with:.color(color),style:StrokeStyle(lineWidth:1.3*s,lineCap:.round))
+                var s3=Path(); s3.move(to:pt(15,9));s3.addLine(to:pt(15,17))
+                context.stroke(s3,with:.color(color),style:StrokeStyle(lineWidth:1.3*s,lineCap:.round))
+            }
+        }.frame(width:22,height:22)
+    }
+}
 
 struct PageStripThumbnail: View {
-    let image:      UIImage
-    let isActive:   Bool
-    let pageNumber: Int
-
+    let image:UIImage; let isActive:Bool; let pageNumber:Int
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 56, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isActive ? Color("AccentGreen") : Color("Hairline"),
-                                lineWidth: isActive ? 2 : 1)
-                )
-                .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
-                .scaleEffect(isActive ? 1.0 : 0.97)
-                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isActive)
-
-            Text("\(pageNumber)")
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundColor(Color("TextMuted"))
-                .padding(.trailing, 4).padding(.bottom, 4)
+        ZStack(alignment:.bottomTrailing) {
+            Image(uiImage:image).resizable().scaledToFill().frame(width:56,height:72).clipShape(RoundedRectangle(cornerRadius:8))
+                .overlay(RoundedRectangle(cornerRadius:8).stroke(isActive ? Color("AccentGreen"):Color("Hairline"),lineWidth:isActive ? 2:1))
+                .shadow(color:.black.opacity(0.06),radius:4,y:2).scaleEffect(isActive ? 1.0:0.97)
+                .animation(.spring(response:0.25,dampingFraction:0.8),value:isActive)
+            Text("\(pageNumber)").font(.system(size:8,weight:.semibold,design:.monospaced))
+                .foregroundColor(Color("TextMuted")).padding(.trailing,4).padding(.bottom,4)
         }
     }
 }
 
-// MARK: - Button Styles
-
-private struct ReviewPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.91 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+private struct ReviewBackGlyph: View {
+    var body: some View {
+        Canvas { context, size in
+            let s=min(size.width,size.height)/24
+            var p=Path(); p.move(to:CGPoint(x:15*s,y:5*s)); p.addLine(to:CGPoint(x:8*s,y:12*s)); p.addLine(to:CGPoint(x:15*s,y:19*s))
+            context.stroke(p,with:.color(Color("PrimaryGreen")),style:StrokeStyle(lineWidth:2*s,lineCap:.round,lineJoin:.round))
+        }.frame(width:18,height:18)
     }
 }
 
-// MARK: - Save Sheet
+struct ReviewPressStyle: ButtonStyle {
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label.scaleEffect(configuration.isPressed ? 0.91:1.0)
+            .animation(.spring(response:0.2,dampingFraction:0.7),value:configuration.isPressed)
+    }
+}
 
 enum SaveFormat { case pdf, jpeg }
 
 struct SaveDocumentSheet: View {
-    let images:        [UIImage]
-    var suggestedName: String
-    @Binding var isSaving: Bool
-    let onSave: (String, SaveFormat) -> Void
-
-    @State private var format:     SaveFormat = .pdf
-    @State private var editedName: String     = ""
+    let images:[UIImage]; var suggestedName:String
+    @Binding var isSaving:Bool
+    let onSave:(String,SaveFormat)->Void
+    @State private var format:SaveFormat = .pdf
+    @State private var editedName:String = ""
     @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Spacer().frame(height: 8)
+                // Fields at the top
                 VStack(spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("File Name")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color("TextMuted"))
-                        TextField("Document name", text: $editedName)
-                            .font(.system(size: 16))
-                            .padding(14)
-                            .background(Color("Background"))
-                            .cornerRadius(12)
+                        Text("File Name").font(.system(size: 13, weight: .medium)).foregroundColor(Color("TextMuted"))
+                        TextField("Document name", text: $editedName).font(.system(size: 16)).padding(14)
+                            .background(Color("Background")).cornerRadius(12)
                             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color("Hairline"), lineWidth: 1))
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Format")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color("TextMuted"))
+                        Text("Format").font(.system(size: 13, weight: .medium)).foregroundColor(Color("TextMuted"))
                         Picker("Format", selection: $format) {
                             Text("PDF").tag(SaveFormat.pdf)
                             Text("JPEG").tag(SaveFormat.jpeg)
-                        }
-                        .pickerStyle(.segmented)
+                        }.pickerStyle(.segmented)
                     }
-                    Button {
-                        onSave(editedName.isEmpty ? suggestedName : editedName, format)
-                        dismiss()
-                    } label: {
-                        Group {
-                            if isSaving { ProgressView().tint(.white) }
-                            else {
-                                Text("Save to ScanHonest")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color("PrimaryGreen"))
-                        .cornerRadius(28)
-                    }
-                    .disabled(isSaving)
-
-                    Button {
-                        onSave(editedName.isEmpty ? suggestedName : editedName, format)
-                    } label: {
-                        Text("Save & Share")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(Color("AccentGreen"))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .overlay(RoundedRectangle(cornerRadius: 28).stroke(Color("AccentGreen"), lineWidth: 1.5))
-                    }
-                    .buttonStyle(ReviewPressStyle())
                 }
                 .padding(.horizontal, 24).padding(.top, 12)
+
                 Spacer()
+
+                // Save button pinned flush to the bottom
+                Button { onSave(resolvedName, format); dismiss() } label: {
+                    Group {
+                        if isSaving { ProgressView().tint(.white) }
+                        else { Text("Save to ScanHonest").font(.system(size: 17, weight: .semibold)).foregroundColor(.white) }
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    .background(Color("PrimaryGreen")).cornerRadius(28)
+                }
+                .padding(.horizontal, 24)
+                .disabled(isSaving)
             }
             .background(Color("Surface"))
-            .navigationTitle("Save Document")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") { dismiss() }.foregroundColor(Color("TextMuted"))
-                }
-            }
-            .onAppear {
-                editedName = suggestedName.isEmpty
-                    ? "Scan_\(Date().formatted(date: .abbreviated, time: .omitted))"
-                    : suggestedName
-            }
+            .navigationTitle("Save Document").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Cancel") { dismiss() }.foregroundColor(Color("TextMuted")) } }
+            .onAppear { editedName = suggestedName.isEmpty ? "Scan_\(Date().formatted(date: .abbreviated, time: .omitted))" : suggestedName }
         }
     }
+    private var resolvedName:String { editedName.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? suggestedName : editedName }
 }
 
-// MARK: - UIImage Extensions
-
 extension UIImage {
-
-    func portraitDocumentThumbnail() -> Data? {
-        let targetRatio: CGFloat = 0.77
-        let thumbSize = CGSize(width: 300, height: 390)
-        let srcW = size.width, srcH = size.height
-        let cropRect: CGRect
-        if (srcW / srcH) > targetRatio {
-            let w = srcH * targetRatio
-            cropRect = CGRect(x: (srcW - w) / 2, y: 0, width: w, height: srcH)
-        } else {
-            let h = srcW / targetRatio
-            cropRect = CGRect(x: 0, y: 0, width: srcW, height: min(h, srcH))
-        }
-        let s = scale
-        let scaled = CGRect(x: cropRect.minX*s, y: cropRect.minY*s,
-                            width: cropRect.width*s, height: cropRect.height*s)
-        guard let cg = cgImage?.cropping(to: scaled) else { return jpegData(compressionQuality: 0.7) }
-        let cropped  = UIImage(cgImage: cg, scale: s, orientation: imageOrientation)
-        let renderer = UIGraphicsImageRenderer(size: thumbSize)
-        return renderer.image { _ in cropped.draw(in: CGRect(origin: .zero, size: thumbSize)) }
-            .jpegData(compressionQuality: 0.75)
+    func portraitDocumentThumbnail()->Data? {
+        let targetRatio:CGFloat=0.77; let thumbSize=CGSize(width:300,height:390)
+        let srcW=size.width,srcH=size.height
+        let cropRect:CGRect
+        if srcH>0,(srcW/srcH)>targetRatio { let w=srcH*targetRatio; cropRect=CGRect(x:(srcW-w)/2,y:0,width:w,height:srcH) }
+        else { let h=srcH>0 ? srcW/targetRatio:srcW; cropRect=CGRect(x:0,y:0,width:srcW,height:min(h,srcH)) }
+        let s=scale
+        guard let cg=cgImage?.cropping(to:CGRect(x:cropRect.minX*s,y:cropRect.minY*s,width:cropRect.width*s,height:cropRect.height*s)) else { return jpegData(compressionQuality:0.7) }
+        return UIGraphicsImageRenderer(size:thumbSize).image{_ in UIImage(cgImage:cg,scale:s,orientation:imageOrientation).draw(in:CGRect(origin:.zero,size:thumbSize))}.jpegData(compressionQuality:0.75)
     }
-
-    func applyingGrayscale() -> UIImage? {
-        guard let ci = CIImage(image: self) else { return nil }
-        let f = CIFilter(name: "CIColorControls")
-        f?.setValue(ci, forKey: kCIInputImageKey)
-        f?.setValue(0,  forKey: kCIInputSaturationKey)
-        guard let out = f?.outputImage else { return nil }
-        guard let cg = CIContext().createCGImage(out, from: out.extent) else { return nil }
-        return UIImage(cgImage: cg, scale: scale, orientation: imageOrientation)
+    func applyingGrayscale()->UIImage? {
+        guard let ci=CIImage(image:self) else{return nil}
+        let f=CIFilter(name:"CIColorControls");f?.setValue(ci,forKey:kCIInputImageKey);f?.setValue(0,forKey:kCIInputSaturationKey)
+        guard let out=f?.outputImage,let cg=CIContext().createCGImage(out,from:out.extent) else{return nil}
+        return UIImage(cgImage:cg,scale:scale,orientation:imageOrientation)
     }
-
-    func applyingBlackAndWhite() -> UIImage? {
-        guard let ci = CIImage(image: self) else { return nil }
-        let f = CIFilter(name: "CIPhotoEffectNoir")
-        f?.setValue(ci, forKey: kCIInputImageKey)
-        guard let out = f?.outputImage else { return nil }
-        guard let cg = CIContext().createCGImage(out, from: out.extent) else { return nil }
-        return UIImage(cgImage: cg, scale: scale, orientation: imageOrientation)
+    func applyingBlackAndWhite()->UIImage? {
+        guard let ci=CIImage(image:self) else{return nil}
+        let f=CIFilter(name:"CIPhotoEffectNoir");f?.setValue(ci,forKey:kCIInputImageKey)
+        guard let out=f?.outputImage,let cg=CIContext().createCGImage(out,from:out.extent) else{return nil}
+        return UIImage(cgImage:cg,scale:scale,orientation:imageOrientation)
     }
-
-    func applyingAutoEnhance() -> UIImage? {
-        guard let ci = CIImage(image: self) else { return nil }
-        let f = CIFilter(name: "CIColorControls")
-        f?.setValue(ci,   forKey: kCIInputImageKey)
-        f?.setValue(1.15, forKey: kCIInputContrastKey)
-        f?.setValue(0.05, forKey: kCIInputBrightnessKey)
-        f?.setValue(1.1,  forKey: kCIInputSaturationKey)
-        guard let out = f?.outputImage else { return nil }
-        guard let cg = CIContext().createCGImage(out, from: out.extent) else { return nil }
-        return UIImage(cgImage: cg, scale: scale, orientation: imageOrientation)
+    func applyingAutoEnhance()->UIImage? {
+        guard let ci=CIImage(image:self) else{return nil}
+        let f=CIFilter(name:"CIColorControls")
+        f?.setValue(ci,forKey:kCIInputImageKey);f?.setValue(1.15,forKey:kCIInputContrastKey)
+        f?.setValue(0.05,forKey:kCIInputBrightnessKey);f?.setValue(1.1,forKey:kCIInputSaturationKey)
+        guard let out=f?.outputImage,let cg=CIContext().createCGImage(out,from:out.extent) else{return nil}
+        return UIImage(cgImage:cg,scale:scale,orientation:imageOrientation)
     }
-
-    func rotated(by degrees: CGFloat) -> UIImage? {
-        let rad = degrees * .pi / 180
-        var s = CGRect(origin: .zero, size: size).applying(CGAffineTransform(rotationAngle: rad)).size
-        s.width = floor(s.width); s.height = floor(s.height)
-        UIGraphicsBeginImageContextWithOptions(s, false, scale)
-        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
-        ctx.translateBy(x: s.width/2, y: s.height/2)
-        ctx.rotate(by: rad)
-        draw(in: CGRect(x: -size.width/2, y: -size.height/2, width: size.width, height: size.height))
-        let result = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
+    func rotated(by degrees:CGFloat)->UIImage? {
+        let rad=degrees * .pi/180
+        var s=CGRect(origin:.zero,size:size).applying(CGAffineTransform(rotationAngle:rad)).size
+        s.width=floor(s.width);s.height=floor(s.height)
+        UIGraphicsBeginImageContextWithOptions(s,false,scale)
+        guard let ctx=UIGraphicsGetCurrentContext() else{return nil}
+        ctx.translateBy(x:s.width/2,y:s.height/2);ctx.rotate(by:rad)
+        draw(in:CGRect(x:-size.width/2,y:-size.height/2,width:size.width,height:size.height))
+        let result=UIGraphicsGetImageFromCurrentImageContext();UIGraphicsEndImageContext()
         return result
     }
 }
 
-// MARK: - Previews
-
 #Preview {
-    ScanReviewView(images: [], isPresented: .constant(true), onSave: { _ in })
-        .environmentObject(StoreKitManager())
-        .environmentObject(ScanLimitManager())
+    ScanReviewView(images:[],isPresented:.constant(true),onSave:{_ in})
+        .environmentObject(StoreKitManager()).environmentObject(ScanLimitManager())
 }
-
-

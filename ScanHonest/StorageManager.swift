@@ -31,9 +31,16 @@ final class StorageManager {
     private let localDocumentsURL: URL
     private let logger            = Logger(subsystem: "com.afzal.ScanHonest", category: "Storage")
 
-    /// In-memory queue of local files waiting to be pushed to iCloud.
-    /// Flushed when connectivity is restored via `flushPendingSyncQueue()`.
-    private var pendingSyncQueue: [URL] = []
+    /// HIGH-02 FIX: pendingSyncQueue was a plain var accessed from both
+    /// the main thread (savePDF) and NetworkMonitor's utility queue (flushPendingSyncQueue).
+    /// Now protected by a dedicated serial DispatchQueue so all reads/writes
+    /// are serialised without blocking either caller.
+    private let syncQueueLock = DispatchQueue(label: "com.afzal.ScanHonest.syncQueue")
+    private var _pendingSyncQueue: [URL] = []
+    private var pendingSyncQueue: [URL] {
+        get { syncQueueLock.sync { _pendingSyncQueue } }
+        set { syncQueueLock.sync { _pendingSyncQueue = newValue } }
+    }
 
     private var iCloudURL: URL? {
         fileManager.url(forUbiquityContainerIdentifier: nil)?
@@ -71,9 +78,12 @@ final class StorageManager {
             return nil
         }
         do {
-            try pdfData.write(to: targetURL)
+            // SECURITY: encrypt with AES-256-GCM before writing; atomic write-to-temp
+            // then FileManager.replaceItem so a crash mid-write never leaves a partial
+            // or plaintext file at the final URL. Key is stored in Keychain only.
+            try DocumentEncryptionManager.shared.writeEncrypted(pdfData, to: targetURL)
         } catch {
-            logger.error("savePDF write failed: \(error.localizedDescription)")
+            logger.error("savePDF encrypted write failed: \(error.localizedDescription)")
             return nil
         }
 
@@ -109,7 +119,17 @@ final class StorageManager {
 
     // MARK: - Load / Delete
 
-    func loadPDF(from url: URL) -> PDFDocument? { PDFDocument(url: url) }
+    /// Decrypts the AES-256-GCM file at `url` and returns a PDFDocument.
+    /// Falls back to reading the URL directly (for documents saved before encryption
+    /// was introduced) if decryption fails.
+    func loadPDF(from url: URL) -> PDFDocument? {
+        if let decrypted = try? DocumentEncryptionManager.shared.readEncrypted(from: url) {
+            return PDFDocument(data: decrypted)
+        }
+        // Legacy fallback: plaintext PDFs written before encryption was introduced
+        logger.warning("loadPDF: decryption failed for \(url.lastPathComponent) — trying plaintext fallback")
+        return PDFDocument(url: url)
+    }
 
     func deleteDocument(at url: URL) {
         try? fileManager.removeItem(at: url)

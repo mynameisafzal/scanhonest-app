@@ -62,6 +62,19 @@ enum StoreKitError: LocalizedError {
     }
 }
 
+// MARK: - Product IDs
+//
+// Single source of truth for all In-App Purchase identifiers.
+// These must match exactly what is configured in App Store Connect.
+
+enum ProductID {
+    static let monthly  = "scanhonest.pro.monthly"
+    static let lifetime = "scanhonest.pro.lifetime"
+
+    /// All product IDs — passed to Product.products(for:) on launch.
+    static let all: Set<String> = [monthly, lifetime]
+}
+
 // MARK: - StoreKitManager
 
 @MainActor
@@ -81,9 +94,9 @@ class StoreKitManager: ObservableObject {
     @Published var subscriptionRenewalDate: Date?             = nil
     @Published var isSubscriptionActive:  Bool                = false
 
-    // MARK: Product IDs
-    static let lifetimeProductID = "com.afzal.ScanHonest.pro.lifetime"
-    static let monthlyProductID  = "com.afzal.ScanHonest.pro.monthly"
+    // MARK: Product ID aliases — kept for call-sites that reference Self.*
+    static let lifetimeProductID = ProductID.lifetime
+    static let monthlyProductID  = ProductID.monthly
 
     private let logger = Logger(subsystem: "com.afzal.ScanHonest", category: "StoreKit")
 
@@ -95,9 +108,25 @@ class StoreKitManager: ObservableObject {
     // MARK: - Convenience accessors
 
     /// True if the user has an active Pro entitlement.
-    /// Falls back to persisted value when subscription status is still loading
-    /// (e.g. cold launch with no network) so the UI never incorrectly downgrades.
-    var isPro: Bool { subscriptionStatus.isPro || storedIsPro }
+    /// MED-06 FIX: the old implementation OR'd subscriptionStatus.isPro with storedIsPro,
+    /// meaning a cancelled monthly subscriber retained Pro access indefinitely while offline.
+    /// New logic:
+    ///   • Lifetime purchase → storedIsPro is the only offline signal (correct: lifetime never expires)
+    ///   • Monthly subscription → use subscriptionStatus exclusively once we have checked;
+    ///     fall back to storedIsPro ONLY during the brief .unknown initialisation window
+    ///     so the UI doesn't incorrectly downgrade before the first entitlement check completes.
+    var isPro: Bool {
+        switch subscriptionStatus {
+        case .unknown:
+            // Still loading — use persisted value to avoid a flash of downgraded UI.
+            // For lifetime purchases this is always correct.
+            // For monthly: worst case the user sees Pro for <1 s until check completes.
+            return storedIsPro
+        default:
+            // Authoritative result from StoreKit 2 — trust it completely.
+            return subscriptionStatus.isPro
+        }
+    }
 
     var lifetimeProduct: Product? { products.first { $0.id == Self.lifetimeProductID } }
     var monthlyProduct:  Product? { products.first { $0.id == Self.monthlyProductID  } }
@@ -105,8 +134,23 @@ class StoreKitManager: ObservableObject {
     // MARK: - Init / Deinit
 
     init() {
+        // UITest fast-path: trust UserDefaults directly, skip all StoreKit I/O.
+        // updateSubscriptionStatus() would overwrite storedIsPro = false because
+        // the UITest sandbox has no real entitlements — this guard prevents that.
+        if ProcessInfo.processInfo.arguments.contains("--uitesting") {
+            subscriptionStatus = storedIsPro ? .lifetime : .none
+            isLoading = false
+            return
+        }
+
         // Show cached state immediately while real check runs in background
         subscriptionStatus = storedIsPro ? .unknown : .none
+
+        // Flag loading immediately so the paywall CTA is disabled before the
+        // first Product.products(for:) call completes. Without this there is a
+        // brief window where isLoading=false and products=[] — tapping the CTA
+        // during that window triggers the "Product not available" error.
+        isLoading = true
 
         // Single transaction listener — handles:
         // • Subscription auto-renewals
@@ -139,23 +183,61 @@ class StoreKitManager: ObservableObject {
     // MARK: - Product Loading
 
     /// Fetches products from App Store Connect.
-    /// Guarded so it only hits the network once per session.
-    /// Retries automatically if called again after a failure (products stays empty).
+    /// Skipped if products are already loaded (call reloadProducts() to force a refresh).
+    /// isLoading is set true in init() so the paywall CTA is always disabled
+    /// during the fetch window — no race condition possible.
     func loadProducts() async {
         guard products.isEmpty else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            products = try await Product.products(for: [
-                Self.lifetimeProductID,
-                Self.monthlyProductID
-            ])
-            logger.info("Loaded \(self.products.count) products")
+            print("[StoreKit] Requesting product IDs:", ProductID.all.sorted())
+            let fetched = try await Product.products(for: Array(ProductID.all))
+
+            print("[StoreKit] Requested IDs:", ProductID.all.sorted())
+            print("[StoreKit] Returned product count:", fetched.count)
+            print("[StoreKit] Returned product IDs:", fetched.map { $0.id })
+
+            for p in fetched {
+                print("[StoreKit] ↳ id:", p.id,
+                      "| name:", p.displayName,
+                      "| price:", p.displayPrice,
+                      "| type:", String(describing: p.type))
+            }
+
+            if fetched.isEmpty {
+                print("""
+                [StoreKit] ⚠️ No products returned from App Store Connect.
+                  Checklist — verify ALL of the following:
+                  1. App Bundle ID in App Store Connect must be: com.afzal.ScanHonest
+                  2. In-App Purchase capability must be enabled in the Xcode target
+                  3. Paid Apps Agreement, Tax & Banking must be complete in App Store Connect
+                  4. Product IDs must match EXACTLY (case-sensitive):
+                       \(ProductID.monthly)  → type: Auto-Renewable Subscription
+                       \(ProductID.lifetime) → type: Non-Consumable
+                  5. Each product must have a price tier, at least one localization, and
+                     be set to "Cleared for Sale" in App Store Connect
+                  6. For App Store production, IAPs must be submitted and approved alongside
+                     (or before) the first app build that references them
+                  7. TestFlight uses the sandbox environment automatically — no extra config needed
+                  8. Sandbox: sign in with a Sandbox Apple ID in Settings → App Store
+                """)
+            }
+
+            products = fetched
+            logger.info("loadProducts: loaded \(fetched.count) product(s)")
         } catch {
-            // Don't crash — show error in PaywallView
+            print("[StoreKit] Product fetch error:", error.localizedDescription)
+            logger.error("loadProducts failed: \(error.localizedDescription)")
             errorMessage = "Could not load products. Check your connection and try again."
-            logger.error("Product load failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Clears the product cache and re-fetches from App Store Connect.
+    /// Called from the paywall "Try Again" button after a failed or empty load.
+    func reloadProducts() async {
+        products = []
+        await loadProducts()
     }
 
     // MARK: - Purchase
@@ -163,32 +245,50 @@ class StoreKitManager: ObservableObject {
     /// Initiates a purchase and returns true on success.
     /// Updates subscription status and persists the result.
     func purchase(_ product: Product) async -> Bool {
+        print("[StoreKit] Initiating purchase:", product.id)
+        print("[StoreKit]   displayName:", product.displayName)
+        print("[StoreKit]   displayPrice:", product.displayPrice)
+        print("[StoreKit]   type:", String(describing: product.type))
         do {
             let result = try await product.purchase()
             switch result {
             case .success(let verification):
-                let tx = try checkVerified(verification)
-                await updateSubscriptionStatus()
-                await tx.finish()
-                // Persist immediately for offline resilience
-                storedIsPro     = true
-                purchaseTypeRaw = product.id
-                purchaseDateRaw = Date().timeIntervalSince1970
-                logger.info("Purchase success: \(product.id)")
-                return true
+                print("[StoreKit] Purchase result: success for", product.id)
+                do {
+                    let tx = try checkVerified(verification)
+                    print("[StoreKit] Transaction productID:", tx.productID)
+                    print("[StoreKit] Transaction ID:", tx.id)
+                    print("[StoreKit] Transaction verification: verified ✓")
+                    await updateSubscriptionStatus()
+                    await tx.finish()
+                    // Persist immediately for offline resilience
+                    storedIsPro     = true
+                    purchaseTypeRaw = product.id
+                    purchaseDateRaw = Date().timeIntervalSince1970
+                    logger.info("Purchase success: \(product.id)")
+                    return true
+                } catch {
+                    print("[StoreKit] Transaction verification FAILED:", error.localizedDescription)
+                    logger.error("Purchase verification failed: \(error.localizedDescription)")
+                    // Do NOT unlock Pro on a failed verification
+                    return false
+                }
 
             case .userCancelled:
+                print("[StoreKit] Purchase cancelled by user — no error shown")
                 return false
 
             case .pending:
-                // Ask-to-Buy — transaction will arrive via transactionListener
+                print("[StoreKit] Purchase pending (Ask-to-Buy or payment processing)")
                 errorMessage = "Purchase is pending approval."
                 return false
 
             @unknown default:
+                print("[StoreKit] Unknown purchase result")
                 return false
             }
         } catch {
+            print("[StoreKit] Purchase error:", error.localizedDescription)
             errorMessage = error.localizedDescription
             logger.error("Purchase failed: \(error.localizedDescription)")
             return false
@@ -239,13 +339,18 @@ class StoreKitManager: ObservableObject {
     /// Called on launch, after purchase, after restore, and on each transaction update.
     /// Safe to call multiple times — reads a cached async sequence, not the network.
     func updateSubscriptionStatus() async {
-        var newStatus:       SubscriptionStatus = .none
-        var foundExpiryDate: Date?              = nil
-        var foundRenewalDate: Date?             = nil
+        var newStatus:        SubscriptionStatus = .none
+        var foundExpiryDate:  Date?              = nil
+        var foundRenewalDate: Date?              = nil
+        var entitlementIDs:   [String]           = []
 
         for await result in Transaction.currentEntitlements {
             do {
                 let tx = try checkVerified(result)
+                entitlementIDs.append(tx.productID)
+                print("[StoreKit] Entitlement:", tx.productID,
+                      "| revoked:", tx.revocationDate != nil,
+                      "| expires:", tx.expirationDate?.description ?? "n/a")
 
                 // Skip revoked transactions (refunds, family-sharing removals)
                 guard tx.revocationDate == nil else { continue }
@@ -265,9 +370,12 @@ class StoreKitManager: ObservableObject {
                     // Don't break — continue in case lifetime exists in another entitlement
                 }
             } catch {
+                print("[StoreKit] Entitlement verification FAILED:", error.localizedDescription)
                 logger.error("Entitlement check failed: \(error.localizedDescription)")
             }
         }
+
+        print("[StoreKit] Current entitlement IDs:", entitlementIDs)
 
         // If monthly is active, check whether user cancelled (willAutoRenew = false)
         if newStatus == .active, let monthly = monthlyProduct, let expiry = foundExpiryDate {
@@ -292,6 +400,7 @@ class StoreKitManager: ObservableObject {
 
         NotificationCenter.default.post(name: .subscriptionStatusDidChange, object: nil)
         logger.info("Subscription status updated: \(newStatus.displayText)")
+        print("[StoreKit] Subscription status →", newStatus.displayText, "| isPro:", newStatus.isPro)
     }
 
     // MARK: - Receipt Verification (StoreKit 2 built-in)

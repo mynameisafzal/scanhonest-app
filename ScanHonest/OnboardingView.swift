@@ -1,8 +1,9 @@
 import SwiftUI
 import AVFoundation
 import Photos
+import UserNotifications
 
-// MARK: - OnboardingView (Root)
+// MARK: - OnboardingView
 
 struct OnboardingView: View {
     @State private var currentPage = 0
@@ -10,21 +11,14 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color("Background").ignoresSafeArea()
-
+            Color.shBackground.ignoresSafeArea()
             TabView(selection: $currentPage) {
-                OnboardingSlide1(currentPage: $currentPage)
-                    .tag(0)
-                OnboardingSlide2(currentPage: $currentPage)
-                    .tag(1)
-                OnboardingSlide3(currentPage: $currentPage)
-                    .tag(2)
+                OnboardingSlide1(currentPage: $currentPage).tag(0)
+                OnboardingSlide2(currentPage: $currentPage).tag(1)
+                OnboardingSlide3(currentPage: $currentPage).tag(2)
                 PermissionsSlide(onComplete: {
-                    withAnimation(.easeInOut(duration: 0.35)) {
-                        hasCompletedOnboarding = true
-                    }
-                })
-                .tag(3)
+                    withAnimation(.easeInOut(duration: 0.35)) { hasCompletedOnboarding = true }
+                }).tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: currentPage)
@@ -37,14 +31,11 @@ struct OnboardingView: View {
 struct OnboardingDots: View {
     let total: Int
     let current: Int
-
     var body: some View {
         HStack(spacing: 6) {
             ForEach(0..<total, id: \.self) { i in
                 Capsule()
-                    .fill(i == current
-                          ? Color("PrimaryGreen")
-                          : Color("TextMuted").opacity(0.25))
+                    .fill(i == current ? Color.shPrimary : Color.shMuted.opacity(0.25))
                     .frame(width: i == current ? 20 : 6, height: 6)
                     .animation(.spring(response: 0.3, dampingFraction: 0.75), value: current)
             }
@@ -57,143 +48,138 @@ struct OnboardingDots: View {
 private struct OnboardingPrimaryButton: View {
     let title: String
     let action: () -> Void
-
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(SHFont.body(17, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color("PrimaryGreen"))
-                .cornerRadius(28)
+                .padding(.vertical, SHSpacing.md)
+                .background(Color.shPrimary)
+                .cornerRadius(SHRadius.button)
         }
     }
 }
 
-// MARK: - Slide 1: Welcome / Hero
-// CHANGE 1: "I already have an account" now restores StoreKit purchases
-// silently before skipping onboarding. Shows a loading indicator during restore.
+// MARK: - Slide 1
 
 struct OnboardingSlide1: View {
     @Binding var currentPage: Int
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    // CHANGE 1: Needs storeKitManager to call restorePurchasesSimple()
     @EnvironmentObject var storeKitManager: StoreKitManager
     @State private var isRestoring = false
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { geo in
+            let cardW   = geo.size.width - 56
+            let cardDim = cardW
+
             VStack(alignment: .leading, spacing: 0) {
 
-                // Wordmark
+                // ── Wordmark ──
                 HStack(spacing: 8) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 7)
-                            .fill(Color("PrimaryGreen"))
+                            .fill(Color.shPrimary)
                             .frame(width: 24, height: 24)
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(Color("AccentGreen"))
+                            .foregroundColor(Color.shAccent)
                     }
                     Text("ScanHonest")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color("TextPrimary"))
+                        .foregroundColor(Color.shText)
                     Spacer()
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
+                .padding(.top, 6)
 
-                // Illustration card
-                let cardSize: CGFloat = min(geometry.size.width - 48, 320)
+                // ── Hero — spacers above and below centre the card vertically ──
+                Spacer(minLength: 12)
+
                 ZStack {
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(red: 0.93, green: 0.89, blue: 0.84))
-                    IllustrationDocSheet(width: cardSize * 0.50, rotation: -8,
-                        offsetX: -cardSize * 0.12, offsetY: -cardSize * 0.04)
-                    IllustrationDocSheet(width: cardSize * 0.48, rotation: 5,
-                        offsetX: cardSize * 0.14, offsetY: -cardSize * 0.02)
-                    IllustrationPhone(width: cardSize * 0.32, offsetY: cardSize * 0.10)
+                        .fill(LinearGradient(
+                            colors: [Color(red: 0.93, green: 0.90, blue: 0.85),
+                                     Color(red: 0.88, green: 0.84, blue: 0.75)],
+                            startPoint: .top, endPoint: .bottom))
+                    IllustrationDocSheet(width: cardDim * 0.52, rotation: -6,
+                                        offsetX: -cardDim * 0.10, offsetY: 0)
+                    IllustrationDocSheet(width: cardDim * 0.50, rotation: 8,
+                                        offsetX:  cardDim * 0.13, offsetY: cardDim * 0.04)
+                    IllustrationPhone(width: cardDim * 0.34, offsetY: cardDim * 0.06)
                 }
-                .frame(width: cardSize, height: cardSize)
-                .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+                .frame(width: cardDim, height: cardDim)
+                .shadow(color: .black.opacity(0.07), radius: 14, y: 6)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 12)
 
-                // Headline
+                Spacer(minLength: 12)
+
+                // ── Copy ──
                 Text("Scan anything.\nKeep everything.")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundColor(Color("TextPrimary"))
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(Color.shText)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
+
+                (Text("No tricks. No surprise paywalls. Your first ")
+                    .foregroundColor(Color.shMuted) +
+                 Text("5 scans are completely free")
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.shText) +
+                 Text(" — every month, forever.")
+                    .foregroundColor(Color.shMuted))
+                    .font(.system(size: 15))
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
+
+                // ── Dots ──
+                OnboardingDots(total: 4, current: 0)
+                    .frame(maxWidth: .infinity)
                     .padding(.top, 20)
+                    .padding(.bottom, 24)
 
-                // Body
-                Text("No tricks. No surprise paywalls. Your first 5 scans are completely free — every month, forever.")
-                    .font(.system(size: 17))
-                    .foregroundColor(Color("TextMuted"))
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 24)
-
-                Spacer(minLength: 0)
-
-                VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 0)
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, 16)
-
-                    OnboardingPrimaryButton(title: "Get Started") {
-                        withAnimation { currentPage = 1 }
-                    }
-                    .padding(.horizontal, 24)
-
-                    // CHANGE 1: Restore purchases then skip onboarding
-                    Button {
-                        Task {
-                            isRestoring = true
-                            // Silently restore any existing StoreKit purchase.
-                            // Handles: new device install, reinstall, family sharing.
-                            await storeKitManager.restorePurchasesSimple()
-                            await MainActor.run {
-                                isRestoring = false
-                                hasCompletedOnboarding = true
-                            }
-                        }
-                    } label: {
-                        if isRestoring {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .scaleEffect(0.75)
-                                    .tint(Color("TextMuted"))
-                                Text("Restoring…")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(Color("TextMuted"))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                        } else {
-                            Text("I already have an account")
-                                .font(.system(size: 15))
-                                .foregroundColor(Color("TextMuted"))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .disabled(isRestoring)
+                // ── Primary CTA ──
+                OnboardingPrimaryButton(title: "Get Started") {
+                    withAnimation { currentPage = 1 }
                 }
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
+                .accessibilityIdentifier("getStartedButton")
+
+                // ── Restore / account link ──
+                Button {
+                    Task {
+                        isRestoring = true
+                        await storeKitManager.restorePurchasesSimple()
+                        await MainActor.run {
+                            isRestoring = false
+                            hasCompletedOnboarding = true
+                        }
+                    }
+                } label: {
+                    if isRestoring {
+                        HStack(spacing: 8) {
+                            ProgressView().scaleEffect(0.75).tint(Color.shMuted)
+                            Text("Restoring…").font(.system(size: 14)).foregroundColor(Color.shMuted)
+                        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    } else {
+                        Text("I already have an account")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color.shMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 0)
+                    }
+                }
+                .padding(.top, 12)
+                .padding(.bottom, 0)
+                .disabled(isRestoring)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            .padding(.horizontal, 28)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
     }
 }
 
-// MARK: - Illustration: White Document Sheet (unchanged)
+// MARK: - IllustrationDocSheet
 
 private struct IllustrationDocSheet: View {
     let width: CGFloat
@@ -209,7 +195,7 @@ private struct IllustrationDocSheet: View {
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
             VStack(alignment: .leading, spacing: 5) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color("PrimaryGreen").opacity(0.7))
+                    .fill(Color.shPrimary.opacity(0.7))
                     .frame(width: width * 0.52, height: 5)
                 Spacer().frame(height: 2)
                 ForEach([0.88, 0.75, 0.92, 0.65, 0.80], id: \.self) { ratio in
@@ -226,7 +212,7 @@ private struct IllustrationDocSheet: View {
     }
 }
 
-// MARK: - Illustration: Dark Green Phone (unchanged)
+// MARK: - IllustrationPhone
 
 private struct IllustrationPhone: View {
     let width: CGFloat
@@ -243,7 +229,7 @@ private struct IllustrationPhone: View {
 
         ZStack {
             RoundedRectangle(cornerRadius: cornerR)
-                .fill(Color("PrimaryGreen"))
+                .fill(Color.shPrimary)
                 .shadow(color: .black.opacity(0.28), radius: 14, y: 7)
             RoundedRectangle(cornerRadius: screenR)
                 .fill(Color(red: 0.04, green: 0.10, blue: 0.07))
@@ -262,7 +248,7 @@ private struct IllustrationPhone: View {
                     path.addLine(to: CGPoint(x: ax,            y: ay))
                     path.addLine(to: CGPoint(x: ax,            y: ay + dy * arm))
                 }
-                context.stroke(path, with: .color(Color("AccentGreen")),
+                context.stroke(path, with: .color(Color.shAccent),
                     style: StrokeStyle(lineWidth: strokeW, lineCap: .round, lineJoin: .round))
             }
             .frame(width: width, height: height)
@@ -272,335 +258,231 @@ private struct IllustrationPhone: View {
     }
 }
 
-// MARK: - Slide 2: Honest Pricing (unchanged)
+// MARK: - Slide 2
 
 struct OnboardingSlide2: View {
     @Binding var currentPage: Int
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { geo in
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(Color("PrimaryGreen"))
-                            .frame(width: 24, height: 24)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(Color("AccentGreen"))
+                        RoundedRectangle(cornerRadius: 7).fill(Color.shPrimary).frame(width: 24, height: 24)
+                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(Color.shAccent)
                     }
-                    Text("ScanHonest")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color("TextPrimary"))
+                    Text("ScanHonest").font(.system(size: 15, weight: .semibold)).foregroundColor(Color.shText)
                     Spacer()
                     Button("Skip") { withAnimation { currentPage = 2 } }
-                        .font(.system(size: 17))
-                        .foregroundColor(Color("TextMuted"))
+                        .font(.system(size: 14)).foregroundColor(Color.shMuted)
+                        .accessibilityIdentifier("skipButton")
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
+                .padding(.horizontal, 28).padding(.top, 6)
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Honest pricing,\nalways.")
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundColor(Color("TextPrimary"))
+                    Text("Honest pricing,\nalways.").font(.system(size: 30, weight: .bold)).foregroundColor(Color.shText)
                     Text("We show you both options up front. Pick whatever's right — or stay free forever.")
-                        .font(.system(size: 14.5))
-                        .foregroundColor(Color("TextMuted"))
-                        .lineSpacing(3)
+                        .font(.system(size: 14.5)).foregroundColor(Color.shMuted).lineSpacing(3)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 28).padding(.top, 22)
 
-                VStack(spacing: 14) {
-                    OnboardingPricingCard(
-                        price: "$4.99", period: "once",
-                        headline: "Pay once, yours forever.",
-                        subtext: "No recurring charges. Ever.",
-                        badgeText: "MOST POPULAR",
-                        badgeStyle: .primary, isSelected: true
-                    )
-                    OnboardingPricingCard(
-                        price: "$1.99", period: "/ month",
-                        headline: "Try for a month, cancel anytime.",
-                        subtext: "Both prices shown — no hiding.",
-                        badgeText: "TRY FIRST",
-                        badgeStyle: .muted, isSelected: false
-                    )
+                VStack(spacing: 12) {
+                    OnboardingPricingCard(price: "$4.99", period: "once", headline: "Pay once, yours forever.",
+                        subtext: "No recurring charges. Ever.", badgeText: "MOST POPULAR", badgeStyle: .primary, isSelected: true)
+                    OnboardingPricingCard(price: "$1.99", period: "/ month", headline: "Try for a month, cancel anytime.",
+                        subtext: "Both prices shown — no hiding.", badgeText: "TRY FIRST", badgeStyle: .muted, isSelected: false)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .padding(.horizontal, 24).padding(.top, 22)
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: 4) {
-                    Text("You can upgrade anytime. Or never.")
-                        .font(.system(size: 15)).foregroundColor(Color("TextMuted"))
-                    Text("5 free scans every month, forever.")
-                        .font(.system(size: 15, weight: .semibold)).foregroundColor(Color("PrimaryGreen"))
+                    Text("You can upgrade anytime. Or never.").font(.system(size: 13)).foregroundColor(Color.shPrimary)
+                    Text("5 free scans every month, forever.").font(.system(size: 13, weight: .semibold)).foregroundColor(Color.shPrimary)
                 }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Color("AccentSoft"))
-                .cornerRadius(12)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 14)
+                .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                .padding(12).background(Color.shAccentSoft).cornerRadius(12)
+                .padding(.horizontal, 24).padding(.bottom, 14)
 
                 VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 1)
-                        .frame(maxWidth: .infinity).padding(.bottom, 16)
-                    OnboardingPrimaryButton(title: "Continue") {
-                        withAnimation { currentPage = 2 }
-                    }
-                    .padding(.horizontal, 24)
+                    OnboardingDots(total: 4, current: 1).frame(maxWidth: .infinity).padding(.bottom, 24)
+                    OnboardingPrimaryButton(title: "Continue") { withAnimation { currentPage = 2 } }
+                        .accessibilityIdentifier("continueButton")
+                        .padding(.horizontal, 24)
                 }
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
+                .padding(.bottom, 0)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
     }
 }
 
-// MARK: - Pricing Card (Onboarding)
+// MARK: - Pricing Card
 
 enum OnboardingBadgeStyle { case primary, muted }
 
 struct OnboardingPricingCard: View {
-    let price: String
-    let period: String
-    let headline: String
-    let subtext: String
-    let badgeText: String
-    let badgeStyle: OnboardingBadgeStyle
-    let isSelected: Bool
+    let price: String; let period: String; let headline: String
+    let subtext: String; let badgeText: String
+    let badgeStyle: OnboardingBadgeStyle; let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text(price)
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundColor(isSelected ? Color("PrimaryGreen") : Color("TextPrimary"))
-                Text(period)
-                    .font(.system(size: 14))
-                    .foregroundColor(Color("TextMuted"))
+                Text(price).font(.system(size: 36, weight: .bold))
+                    .foregroundColor(isSelected ? Color.shPrimary : Color.shText)
+                Text(period).font(.system(size: 14)).foregroundColor(Color.shMuted)
             }
-            Text(headline)
-                .font(.system(size: 14, weight: .medium)).foregroundColor(Color("TextPrimary"))
-                .padding(.top, 2)
-            Text(subtext)
-                .font(.system(size: 13)).foregroundColor(Color("TextMuted"))
+            Text(headline).font(.system(size: 14, weight: .medium)).foregroundColor(Color.shText).padding(.top, 2)
+            Text(subtext).font(.system(size: 13)).foregroundColor(Color.shMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18).padding(.top, 10)
-        .background(Color("Surface"))
-        .cornerRadius(16)
-        .overlay(RoundedRectangle(cornerRadius: 16)
-            .stroke(isSelected ? Color("PrimaryGreen") : Color("Hairline"),
-                    lineWidth: isSelected ? 1.5 : 1))
-        .shadow(color: .black.opacity(isSelected ? 0.07 : 0.03),
-                radius: isSelected ? 12 : 4, y: isSelected ? 4 : 1)
+        .background(Color.shSurface).cornerRadius(18)
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(isSelected ? Color.shPrimary : Color.shHairline, lineWidth: isSelected ? 2 : 1))
+        .shadow(color: .black.opacity(isSelected ? 0.07 : 0.03), radius: isSelected ? 12 : 4, y: isSelected ? 4 : 1)
         .overlay(alignment: .topLeading) {
             Text(badgeText)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(badgeStyle == .primary ? Color("PrimaryGreen") : Color("TextMuted"))
+                .foregroundColor(badgeStyle == .primary ? .white : Color.shMuted)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Color("Background"))
+                .background(badgeStyle == .primary ? Color.shPrimary : Color.shBackground)
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(
-                    badgeStyle == .primary ? Color("PrimaryGreen") : Color("TextMuted").opacity(0.4),
-                    lineWidth: 1))
+                .overlay(Capsule().stroke(badgeStyle == .primary ? Color.clear : Color.shMuted.opacity(0.4), lineWidth: 1))
                 .offset(x: 16, y: -10)
         }
         .padding(.top, 10)
     }
 }
 
-// MARK: - Slide 3: Privacy (unchanged)
+// MARK: - Slide 3
 
 struct OnboardingSlide3: View {
     @Binding var currentPage: Int
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { geo in
             VStack(spacing: 0) {
-                Image(systemName: "lock.icloud")
-                    .font(.system(size: 64, weight: .thin))
-                    .foregroundColor(Color("PrimaryGreen"))
-                    .padding(.top, 40)
-
+                Image(systemName: "lock.icloud").font(.system(size: 64, weight: .thin))
+                    .foregroundColor(Color.shPrimary).padding(.top, 40)
                 VStack(spacing: 14) {
-                    Text("Your scans,\nyour device.")
-                        .font(.system(size: 34, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(Color("TextPrimary"))
+                    Text("Your scans,\nyour device.").font(.system(size: 34, weight: .bold))
+                        .multilineTextAlignment(.center).foregroundColor(Color.shText)
                     Text("Everything syncs privately via your iCloud.\nWe never see your documents.")
-                        .font(.system(size: 17))
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(Color("TextMuted"))
-                        .lineSpacing(4)
+                        .font(.system(size: 17)).multilineTextAlignment(.center).foregroundColor(Color.shMuted).lineSpacing(4)
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 28)
-
+                .padding(.horizontal, 32).padding(.top, 28)
                 HStack(spacing: 20) {
-                    DevicePill(icon: "iphone",        label: "iPhone")
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color("AccentGreen"))
-                    DevicePill(icon: "ipad",          label: "iPad")
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color("AccentGreen"))
+                    DevicePill(icon: "iphone", label: "iPhone")
+                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 14, weight: .medium)).foregroundColor(Color.shAccent)
+                    DevicePill(icon: "ipad", label: "iPad")
+                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 14, weight: .medium)).foregroundColor(Color.shAccent)
                     DevicePill(icon: "laptopcomputer", label: "Mac")
                 }
                 .padding(.top, 32)
-
                 Spacer(minLength: 0)
-
                 VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 2)
-                        .frame(maxWidth: .infinity).padding(.bottom, 16)
-                    OnboardingPrimaryButton(title: "Set Up Permissions") {
-                        withAnimation { currentPage = 3 }
-                    }
-                    .padding(.horizontal, 24)
+                    OnboardingDots(total: 4, current: 2).frame(maxWidth: .infinity).padding(.bottom, 24)
+                    OnboardingPrimaryButton(title: "Set Up Permissions") { withAnimation { currentPage = 3 } }.padding(.horizontal, 24)
                 }
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
+                .padding(.bottom, 0)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
     }
 }
 
 struct DevicePill: View {
-    let icon: String
-    let label: String
-
+    let icon: String; let label: String
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 30, weight: .light))
-                .foregroundColor(Color("PrimaryGreen"))
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundColor(Color("TextMuted"))
+            Image(systemName: icon).font(.system(size: 30, weight: .light)).foregroundColor(Color.shPrimary)
+            Text(label).font(.system(size: 12)).foregroundColor(Color.shMuted)
         }
     }
 }
 
-// MARK: - Slide 4: Permissions
-// CHANGE 2: requestCameraAndComplete() now requests Camera → Photos → Notifications
-// in sequence. "Maybe Later" skips all — iOS asks lazily at point of use.
+// MARK: - Permissions Slide
 
 struct PermissionsSlide: View {
     let onComplete: () -> Void
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("A few permissions —\nhere's exactly why.")
-                                .font(.system(size: 28, weight: .bold))
-                                .foregroundColor(Color("TextPrimary"))
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("iOS will ask separately. We're explaining first so you can decide with the full picture.")
-                                .font(.system(size: 14))
-                                .foregroundColor(Color("TextMuted"))
-                                .lineSpacing(3)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 18)
-
-                        VStack(spacing: 10) {
-                            PermissionRow(
-                                icon: "camera.viewfinder",
-                                title: "Camera",
-                                description: "To scan documents. We don't record video — only the frames you capture.",
-                                isRequired: true
-                            )
-                            PermissionRow(
-                                icon: "photo.on.rectangle",
-                                title: "Photo Library",
-                                description: "Only when you tap Import. We never browse on our own.",
-                                isRequired: false
-                            )
-                            PermissionRow(
-                                icon: "bell",
-                                title: "Notifications",
-                                description: "Optional — alerts when a long scan finishes. Nothing else.",
-                                isRequired: false
-                            )
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 13))
-                                .foregroundColor(Color("PrimaryGreen"))
-                                .padding(.top, 1)
-                            Text("All processing happens on your device. We never see, upload, or analyze your documents.")
-                                .font(.system(size: 12.5))
-                                .foregroundColor(Color("PrimaryGreen"))
-                                .lineSpacing(3)
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("AccentSoft"))
-                        .cornerRadius(12)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 16)
-                        .padding(.bottom, 16)
-                    }
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                // ── Header ──
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("A few permissions —\nhere's exactly why.")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(Color.shText)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("iOS will ask separately. We're explaining first so you can decide with the full picture.")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.shMuted)
+                        .lineSpacing(3)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .padding(.top, 18)
 
+                // ── Permission rows ──
+                VStack(spacing: 10) {
+                    PermissionRow(icon: .scan, title: "Camera",
+                        description: "To scan documents. We don't record video — only the frames you capture.", isRequired: true)
+                    PermissionRow(icon: .photos, title: "Photo Library",
+                        description: "Only when you tap Import. We never browse on our own.", isRequired: false)
+                    PermissionRow(icon: .bell, title: "Notifications",
+                        description: "Optional — alerts when a long scan finishes. Nothing else.", isRequired: false)
+                }
+                .padding(.top, 22)
+
+                // ── Privacy note ──
+                HStack(alignment: .top, spacing: 10) {
+                    PermissionGlyph(icon: .lock, size: 18).padding(.top, 1)
+                    Text("All processing happens on your device. We never see, upload, or analyze your documents.")
+                        .font(.system(size: 12.5))
+                        .foregroundColor(Color.shPrimary)
+                        .lineSpacing(3)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.shAccent.opacity(0.12))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.shAccentSoft, lineWidth: 1))
+                .padding(.top, 18)
+
+                // ── marginTop: auto — pushes bottom block to bottom ──
+                Spacer(minLength: 0)
+
+                // ── Bottom block: dots + CTA + Maybe Later ──
                 VStack(spacing: 0) {
                     OnboardingDots(total: 4, current: 3)
-                        .frame(maxWidth: .infinity).padding(.bottom, 16)
-
-                    OnboardingPrimaryButton(title: "Allow & Continue") {
-                        requestCameraAndComplete()
-                    }
-                    .padding(.horizontal, 24)
-
-                    // CHANGE 2: "Maybe Later" skips all permissions.
-                    // iOS will request each one lazily at the point of use:
-                    // Camera → when Scan tapped
-                    // Photos → when Import → Choose Photo tapped
-                    // Notifications → only via Settings toggle
-                    Button("Maybe Later") {
-                        onComplete()
-                    }
-                    .font(.system(size: 15))
-                    .foregroundColor(Color("TextMuted"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 4)
-                    .padding(.bottom, 8)
-                    .padding(.horizontal, 24)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 24)
+                    OnboardingPrimaryButton(title: "Allow & Continue") { requestCameraAndComplete() }
+                        .accessibilityIdentifier("allowContinueButton")
+                    Button("Maybe Later") { onComplete() }
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.shMuted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 14)
+                        .accessibilityIdentifier("maybeLaterButton")
                 }
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom, 16))
-                .background(Color("Background"))
+                .padding(.bottom, 0)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .padding(.horizontal, 24)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
     }
 
-    // CHANGE 2: Sequential permission requests — Camera → Photos → Notifications
     private func requestCameraAndComplete() {
-        // Step 1: Camera (required)
+        // Request Camera (required) → Photos (optional) → Notifications (optional).
+        // Nearby Share (local network) permission fires automatically the first
+        // time the user taps "Nearby Share" in the share sheet — no prompt here.
         AVCaptureDevice.requestAccess(for: .video) { _ in
-            // Step 2: Photos (optional)
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in
-                // Step 3: Notifications (optional)
-                NotificationManager.shared.requestAuthorization { granted in
-                    // granted result already saved to UserDefaults by NotificationManager
+                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
                     DispatchQueue.main.async { onComplete() }
                 }
             }
@@ -608,52 +490,138 @@ struct PermissionsSlide: View {
     }
 }
 
-// MARK: - Permission Row (unchanged)
+// MARK: - Permission Row
 
-struct PermissionRow: View {
-    let icon: String
-    let title: String
-    let description: String
-    let isRequired: Bool
+private enum PermissionIcon {
+    case scan
+    case photos
+    case bell
+    case lock
+
+    var size: CGFloat {
+        switch self {
+        case .photos: 20
+        case .lock: 18
+        default: 22
+        }
+    }
+}
+
+private struct PermissionGlyph: View {
+    let icon: PermissionIcon
+    let size: CGFloat
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            let scale = min(canvasSize.width, canvasSize.height) / 24
+            let color = Color.shPrimary
+
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: x * scale, y: y * scale)
+            }
+
+            switch icon {
+            case .scan:
+                var corners = Path()
+                corners.move(to: point(3, 7))
+                corners.addLine(to: point(3, 5))
+                corners.addQuadCurve(to: point(5, 3), control: point(3, 3))
+                corners.addLine(to: point(7, 3))
+                corners.move(to: point(21, 7))
+                corners.addLine(to: point(21, 5))
+                corners.addQuadCurve(to: point(19, 3), control: point(21, 3))
+                corners.addLine(to: point(17, 3))
+                corners.move(to: point(3, 17))
+                corners.addLine(to: point(3, 19))
+                corners.addQuadCurve(to: point(5, 21), control: point(3, 21))
+                corners.addLine(to: point(7, 21))
+                corners.move(to: point(21, 17))
+                corners.addLine(to: point(21, 19))
+                corners.addQuadCurve(to: point(19, 21), control: point(21, 21))
+                corners.addLine(to: point(17, 21))
+                context.stroke(corners, with: .color(color), style: StrokeStyle(lineWidth: 1.8 * scale, lineCap: .round))
+
+                var scanLine = Path()
+                scanLine.move(to: point(7, 12))
+                scanLine.addLine(to: point(17, 12))
+                context.stroke(scanLine, with: .color(color), style: StrokeStyle(lineWidth: 1.8 * scale, lineCap: .round))
+
+            case .photos:
+                let frame = Path(roundedRect: CGRect(x: 3 * scale, y: 5 * scale, width: 18 * scale, height: 14 * scale), cornerRadius: 2 * scale)
+                context.stroke(frame, with: .color(color), lineWidth: 1.8 * scale)
+                let dot = Path(ellipseIn: CGRect(x: 7 * scale, y: 8.5 * scale, width: 3 * scale, height: 3 * scale))
+                context.fill(dot, with: .color(color))
+
+                var hills = Path()
+                hills.move(to: point(3, 17))
+                hills.addLine(to: point(8, 13))
+                hills.addLine(to: point(12, 16))
+                hills.addLine(to: point(15, 14))
+                hills.addLine(to: point(21, 18))
+                context.stroke(hills, with: .color(color), style: StrokeStyle(lineWidth: 1.8 * scale, lineJoin: .round))
+
+            case .bell:
+                var bell = Path()
+                bell.move(to: point(6, 13))
+                bell.addLine(to: point(6, 9))
+                bell.addCurve(to: point(18, 9), control1: point(6, 5.7), control2: point(18, 5.7))
+                bell.addLine(to: point(18, 13))
+                bell.addLine(to: point(19.5, 16))
+                bell.addLine(to: point(4.5, 16))
+                bell.closeSubpath()
+                context.stroke(bell, with: .color(color), style: StrokeStyle(lineWidth: 1.6 * scale, lineJoin: .round))
+
+                var clapper = Path()
+                clapper.move(to: point(10, 19))
+                clapper.addCurve(to: point(14, 19), control1: point(10.4, 21), control2: point(13.6, 21))
+                context.stroke(clapper, with: .color(color), lineWidth: 1.6 * scale)
+
+            case .lock:
+                let rect = Path(roundedRect: CGRect(x: 5 * scale, y: 11 * scale, width: 14 * scale, height: 9 * scale), cornerRadius: 2 * scale)
+                context.stroke(rect, with: .color(color), lineWidth: 1.6 * scale)
+
+                var shackle = Path()
+                shackle.move(to: point(8, 11))
+                shackle.addLine(to: point(8, 8))
+                shackle.addCurve(to: point(16, 8), control1: point(8, 2.7), control2: point(16, 2.7))
+                shackle.addLine(to: point(16, 11))
+                context.stroke(shackle, with: .color(color), lineWidth: 1.6 * scale)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private struct PermissionRow: View {
+    let icon: PermissionIcon; let title: String; let description: String; let isRequired: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color("AccentSoft"))
-                    .frame(width: 44, height: 44)
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                    .foregroundColor(Color("PrimaryGreen"))
-            }
-            .padding(.top, 1)
+                RoundedRectangle(cornerRadius: 10).fill(Color.shAccentSoft).frame(width: 44, height: 44)
+                PermissionGlyph(icon: icon, size: icon.size)
+            }.padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color("TextPrimary"))
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundColor(Color.shText)
                     if !isRequired {
                         Text("OPTIONAL")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(Color("TextMuted"))
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Color("TextMuted").opacity(0.1))
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
+                            .foregroundColor(Color.shMuted)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Color.shBackground)
                             .cornerRadius(4)
                     }
                 }
-                Text(description)
-                    .font(.system(size: 13))
-                    .foregroundColor(Color("TextMuted"))
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(description).font(.system(size: 13)).foregroundColor(Color.shMuted)
+                    .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
-        .padding(16)
-        .background(Color("Surface"))
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color("Hairline"), lineWidth: 0.5))
+        .padding(16).background(Color.shSurface).cornerRadius(16)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.shHairline, lineWidth: 1))
     }
 }
 

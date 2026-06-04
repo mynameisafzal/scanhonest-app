@@ -13,6 +13,7 @@ struct PaywallView: View {
     @State private var isRestoring   = false
     @State private var showSuccess   = false
     @State private var errorMessage: String?
+    @State private var showNoSubscriptionAlert = false  // Fix 3
 
     let triggerContext: PaywallTrigger
 
@@ -20,8 +21,16 @@ struct PaywallView: View {
 
     enum PaywallPlan { case oneTime, monthly }
 
-    enum PaywallTrigger {
-        case scanLimit, ocr, iCloudSync, folders, widget, protect, general
+    enum PaywallTrigger: String {
+        case scanLimit   = "scan_limit"
+        case ocr         = "ocr"
+        case iCloudSync  = "icloud_sync"
+        case folders     = "folders"
+        case widget      = "widget"
+        case protect     = "protect"
+        case cloudExport = "cloud_export"
+        case aiNaming    = "ai_naming"
+        case general     = "general"
     }
 
     init(triggerContext: PaywallTrigger = .general) {
@@ -37,7 +46,7 @@ struct PaywallView: View {
                     VStack(alignment: .leading, spacing: 24) {
 
                         PaywallHeaderView(triggerLabel: triggerLabel, triggerIcon: triggerIcon)
-                            .padding(.top, 8)
+                            .padding(.top, 52)  // clear the floating close button (8pt offset + 44pt hit area)
 
                         if triggerContext == .scanLimit {
                             ScanLimitBanner(scanLimitManager: scanLimitManager)
@@ -77,20 +86,30 @@ struct PaywallView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(Color("TextPrimary"))
-                            .frame(width: 32, height: 32)
-                            .background(Color("Surface"))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
+            .toolbar(.hidden, for: .navigationBar)
+            // Floating close button — design SVG: M6 6l12 12M18 6L6 18
+            // (two diagonal strokes, strokeWidth 2, round caps, color TextMuted)
+            // Placed as an overlay so it is never styled by the system toolbar.
+            .overlay(alignment: .topTrailing) {
+                Canvas { context, size in
+                    let s = size.width / 24
+                    var p = Path()
+                    p.move(to:    CGPoint(x: 6*s,  y: 6*s))
+                    p.addLine(to: CGPoint(x: 18*s, y: 18*s))
+                    p.move(to:    CGPoint(x: 18*s, y: 6*s))
+                    p.addLine(to: CGPoint(x: 6*s,  y: 18*s))
+                    context.stroke(p, with: .color(Color("TextMuted")),
+                                   style: StrokeStyle(lineWidth: 2*s, lineCap: .round))
                 }
+                .frame(width: 20, height: 20)
+                .frame(width: 44, height: 44)
+                .background(Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture { dismiss() }
+                .accessibilityLabel("Close")
+                .padding(.top, 8)
+                .padding(.trailing, 16)
+                .accessibilityLabel("Close")
             }
         }
         .onAppear {
@@ -102,16 +121,24 @@ struct PaywallView: View {
         .fullScreenCover(isPresented: $showSuccess) {
             PostPurchaseView(purchaseType: selectedPlan == .oneTime ? .oneTime : .monthly)
         }
+        // Fix 3: "No subscription found" alert — matches design system colours
+        .alert("No Subscription Found", isPresented: $showNoSubscriptionAlert) {
+            Button("OK", role: .cancel) {}
+            Button("View Plans") { showNoSubscriptionAlert = false }  // stays on paywall
+        } message: {
+            Text("We couldn't find an active subscription for your Apple ID.\n\nIf you purchased on a different Apple ID, sign in to that account in Settings → App Store first, then try again.")
+        }
     }
 
     // MARK: - Pricing Layouts
 
     private var pricingCardsVariantA: some View {
         HStack(spacing: 12) {
+            // ONE-TIME on the LEFT — primary, pre-selected plan.
             PricingCardView(
                 planLabel: "ONE-TIME",
                 price: storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99",
-                description: "Pay once, yours forever",
+                description: "Yours forever",
                 subtext: "No recurring charges. Ever.",
                 choosetext: "73% CHOOSE THIS",
                 isSelected: selectedPlan == .oneTime,
@@ -119,11 +146,12 @@ struct PaywallView: View {
                 onSelect: { selectPlan(.oneTime) }
             )
             .frame(maxWidth: .infinity).frame(minHeight: 180)
+            .accessibilityIdentifier("lifetimeOption")
 
             PricingCardView(
                 planLabel: "MONTHLY",
                 price: storeKitManager.monthlyProduct?.displayPrice ?? "$1.99",
-                description: "Try for a month, cancel anytime",
+                description: "per month cancel anytime",
                 subtext: nextBillingText,
                 choosetext: "",
                 isSelected: selectedPlan == .monthly,
@@ -131,23 +159,13 @@ struct PaywallView: View {
                 onSelect: { selectPlan(.monthly) }
             )
             .frame(maxWidth: .infinity).frame(minHeight: 180)
+            .accessibilityIdentifier("monthlyOption")
         }
     }
 
     private var pricingCardsVariantB: some View {
         HStack(spacing: 12) {
-            PricingCardView(
-                planLabel: "MONTHLY",
-                price: storeKitManager.monthlyProduct?.displayPrice ?? "$1.99",
-                description: "Try for a month, cancel anytime",
-                subtext: nextBillingText,
-                choosetext: "TRY FIRST",
-                isSelected: selectedPlan == .monthly,
-                showsTrustedBadge: true,
-                onSelect: { selectPlan(.monthly) }
-            )
-            .frame(maxWidth: .infinity).frame(minHeight: 180)
-
+            // ONE-TIME on the LEFT — primary, pre-selected plan.
             PricingCardView(
                 planLabel: "ONE-TIME",
                 price: storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99",
@@ -155,12 +173,26 @@ struct PaywallView: View {
                 subtext: "No recurring charges. Ever.",
                 choosetext: "",
                 isSelected: selectedPlan == .oneTime,
-                showsTrustedBadge: false,
+                showsTrustedBadge: true,
                 onSelect: { selectPlan(.oneTime) }
             )
             .frame(maxWidth: .infinity).frame(minHeight: 180)
+            .accessibilityIdentifier("lifetimeOption")
+
+            PricingCardView(
+                planLabel: "MONTHLY",
+                price: storeKitManager.monthlyProduct?.displayPrice ?? "$1.99",
+                description: "Try for a month, cancel anytime",
+                subtext: nextBillingText,
+                choosetext: "TRY FIRST",
+                isSelected: selectedPlan == .monthly,
+                showsTrustedBadge: false,
+                onSelect: { selectPlan(.monthly) }
+            )
+            .frame(maxWidth: .infinity).frame(minHeight: 180)
+            .accessibilityIdentifier("monthlyOption")
         }
-        .onAppear { selectedPlan = .monthly }
+        .onAppear { selectedPlan = .oneTime }
     }
 
     private var featureHeroVariantC: some View {
@@ -179,6 +211,7 @@ struct PaywallView: View {
                     onSelect: { selectPlan(.oneTime) }
                 )
                 .frame(maxWidth: .infinity).frame(minHeight: 140)
+                .accessibilityIdentifier("lifetimeOption")
 
                 PricingCardView(
                     planLabel: "MONTHLY",
@@ -191,29 +224,51 @@ struct PaywallView: View {
                     onSelect: { selectPlan(.monthly) }
                 )
                 .frame(maxWidth: .infinity).frame(minHeight: 140)
+                .accessibilityIdentifier("monthlyOption")
             }
         }
     }
 
-    // MARK: - Shared Sub-views
+    // MARK: - Shared sub-views
 
     private var ctaButton: some View {
-        Button { purchase() } label: {
-            Group {
-                if isPurchasing {
-                    ProgressView().tint(.white)
-                } else {
-                    Text(callToActionTitle)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white)
+        VStack(spacing: 10) {
+            Button { purchase() } label: {
+                Group {
+                    // Spinner during purchase OR while products are still loading
+                    if isPurchasing || storeKitManager.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(callToActionTitle)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
                 }
+                .frame(maxWidth: .infinity).frame(height: 52)
+                .background(Color("PrimaryGreen").opacity(ctaIsDisabled ? 0.45 : 1.0))
+                .clipShape(Capsule())
+                .animation(.easeInOut(duration: 0.2), value: ctaIsDisabled)
             }
-            .frame(maxWidth: .infinity).frame(height: 52)
-            .background(Color("PrimaryGreen"))
-            .clipShape(Capsule())
+            .buttonStyle(.plain)
+            .disabled(ctaIsDisabled)
+            .accessibilityIdentifier("paywallContinueButton")
+
+            // Show only after the first load attempt completes with zero products
+            if bothProductsMissing {
+                HStack(spacing: 6) {
+                    Text("Products temporarily unavailable.")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color("TextMuted"))
+                    Button("Try Again") {
+                        errorMessage = nil
+                        Task { await storeKitManager.reloadProducts() }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color("AccentGreen"))
+                }
+                .frame(maxWidth: .infinity)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(isPurchasing || isRestoring)
     }
 
     private var restoreButton: some View {
@@ -229,25 +284,25 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity)
         .disabled(isRestoring || isPurchasing)
+        .accessibilityIdentifier("paywallRestoreLink")
     }
 
     private var featureList: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("WHAT YOU GET")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(Color("TextMuted")).tracking(0.6)
-
-            VStack(spacing: 0) {
-                ForEach(proFeatures.indices, id: \.self) { i in
-                    FeatureRowView(title: proFeatures[i])
-                    if i < proFeatures.count - 1 { Divider().padding(.leading, 36) }
+                .foregroundColor(Color("TextMuted"))
+                .tracking(0.5)
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(proFeatures, id: \.self) { feature in
+                    FeatureRowView(title: feature)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(Color("Surface"))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color("Hairline"), lineWidth: 1))
         }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(Color("Surface"))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color("Hairline"), lineWidth: 1))
     }
 
     private var footer: some View {
@@ -262,9 +317,8 @@ struct PaywallView: View {
             }
             .buttonStyle(.plain)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 20) {
                 Button("Privacy Policy") {}
-                Text("·").foregroundColor(Color("TextMuted"))
                 Button("Terms of Use") {}
             }
             .font(.system(size: 12)).foregroundColor(Color("TextMuted"))
@@ -277,47 +331,70 @@ struct PaywallView: View {
 
     private var triggerIcon: String {
         switch triggerContext {
-        case .scanLimit:  return "doc.viewfinder"
-        case .ocr:        return "text.viewfinder"
-        case .iCloudSync: return "icloud"
-        case .folders:    return "folder"
-        case .widget:     return "square.grid.2x2"
-        case .protect:    return "lock.shield"
-        case .general:    return "star"
+        case .scanLimit:   return "doc.viewfinder"
+        case .ocr:         return "text.viewfinder"
+        case .iCloudSync:  return "icloud"
+        case .folders:     return "folder"
+        case .widget:      return "square.grid.2x2"
+        case .protect:     return "lock.shield"
+        case .cloudExport: return "arrow.up.circle"
+        case .aiNaming:    return "wand.and.stars"
+        case .general:     return "star"
         }
     }
 
     private var triggerLabel: String {
         switch triggerContext {
-        case .scanLimit:  return "SCAN LIMIT REACHED"
-        case .ocr:        return "OCR REQUIRES PRO"
-        case .iCloudSync: return "ICLOUD SYNC REQUIRES PRO"
-        case .folders:    return "FOLDERS REQUIRE PRO"
-        case .widget:     return "WIDGET REQUIRES PRO"
-        case .protect:    return "PROTECTION REQUIRES PRO"
-        case .general:    return "UPGRADE TO PRO"
+        case .scanLimit:   return "SCAN LIMIT REACHED"
+        case .ocr:         return "OCR REQUIRES PRO"
+        case .iCloudSync:  return "ICLOUD SYNC REQUIRES PRO"
+        case .folders:     return "FOLDERS REQUIRE PRO"
+        case .widget:      return "WIDGET REQUIRES PRO"
+        case .protect:     return "PROTECTION REQUIRES PRO"
+        case .cloudExport: return "CLOUD EXPORT REQUIRES PRO"
+        case .aiNaming:    return "AI NAMING REQUIRES PRO"
+        case .general:     return "UPGRADE TO PRO"
         }
     }
 
     private var nextBillingText: String {
-        var components = Calendar.current.dateComponents([.year, .month], from: Date())
-        components.month = (components.month ?? 1) + 1
-        components.day = 1
-        let date = Calendar.current.date(from: components) ?? Date()
+        var comps = Calendar.current.dateComponents([.year, .month], from: Date())
+        comps.month = (comps.month ?? 1) + 1; comps.day = 1
+        let date = Calendar.current.date(from: comps) ?? Date()
         let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"
-        return "Next billing: \(f.string(from: date))"
+        return "Next: \(f.string(from: date))"
     }
 
     private var proFeatures: [String] {
         ["Unlimited scans", "iCloud sync across all devices", "OCR — search inside documents",
          "Folder organization", "AI smart file naming", "iOS home screen widget",
-         "Password protection", "Google Drive & Dropbox export"]
+         "Password protection",]
     }
 
     private var callToActionTitle: String {
         selectedPlan == .oneTime
             ? "Buy Once — \(storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99")"
             : "Try Monthly — \(storeKitManager.monthlyProduct?.displayPrice ?? "$1.99")"
+    }
+
+    // MARK: - Product availability helpers
+
+    /// The StoreKit Product for whichever plan is currently selected.
+    private var selectedProduct: Product? {
+        selectedPlan == .oneTime ? storeKitManager.lifetimeProduct : storeKitManager.monthlyProduct
+    }
+
+    /// True only after the first fetch completes and BOTH products are absent.
+    /// While isLoading is still true this stays false — we never show the
+    /// "temporarily unavailable" state during the initial fetch window.
+    private var bothProductsMissing: Bool {
+        !storeKitManager.isLoading && storeKitManager.products.isEmpty
+    }
+
+    /// CTA button should be disabled when: purchasing/restoring in progress,
+    /// products are still loading, or the selected product is genuinely missing.
+    private var ctaIsDisabled: Bool {
+        isPurchasing || isRestoring || storeKitManager.isLoading || selectedProduct == nil
     }
 
     // MARK: - Actions
@@ -328,12 +405,19 @@ struct PaywallView: View {
     }
 
     private func purchase() {
-        guard let product = selectedPlan == .oneTime
-            ? storeKitManager.lifetimeProduct
-            : storeKitManager.monthlyProduct
-        else { errorMessage = "Product not available. Please try again."; return }
+        // CTA is disabled while loading — guard here as a safety net
+        guard !storeKitManager.isLoading else { return }
 
-        isPurchasing = true; errorMessage = nil
+        guard let product = selectedProduct else {
+            // Only shown if the user somehow bypasses the disabled button
+            errorMessage = storeKitManager.products.isEmpty
+                ? "Products are temporarily unavailable. Tap \"Try Again\" below."
+                : "This product is temporarily unavailable. Please try again."
+            return
+        }
+
+        isPurchasing = true
+        errorMessage = nil
         Task {
             let success = await storeKitManager.purchase(product)
             await MainActor.run {
@@ -342,8 +426,10 @@ struct PaywallView: View {
                     PaywallABTesting.shared.recordConversion(variant: abVariant, product: product.id)
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     showSuccess = true
-                } else {
-                    errorMessage = storeKitManager.errorMessage ?? "Purchase failed. Please try again."
+                } else if let msg = storeKitManager.errorMessage {
+                    // storeKitManager.errorMessage is nil for .userCancelled —
+                    // in that case we show nothing, which is correct UX.
+                    errorMessage = msg
                 }
             }
         }
@@ -352,10 +438,6 @@ struct PaywallView: View {
     private func restore() {
         isRestoring = true; errorMessage = nil
         Task {
-            // FIX: Call restorePurchasesSimple() — the void convenience wrapper.
-            // Calling restorePurchases() here resolved to the RestoreResult-returning
-            // overload, whose return value was unused, causing the compiler warning
-            // that Xcode surfaces as an error at line 373.
             await storeKitManager.restorePurchasesSimple()
             await MainActor.run {
                 isRestoring = false
@@ -363,29 +445,17 @@ struct PaywallView: View {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     showSuccess = true
                 } else {
-                    errorMessage = storeKitManager.errorMessage
-                        ?? "No previous purchase found on this Apple ID. If you purchased on a different Apple ID, sign in to that account first."
+                    // Fix 3: show dedicated alert instead of inline red text
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    showNoSubscriptionAlert = true
                 }
             }
         }
     }
 }
 
-// MARK: - PaywallTrigger rawValue
-
-extension PaywallView.PaywallTrigger {
-    var rawValue: String {
-        switch self {
-        case .scanLimit:  return "scanLimit"
-        case .ocr:        return "ocr"
-        case .iCloudSync: return "iCloudSync"
-        case .folders:    return "folders"
-        case .widget:     return "widget"
-        case .protect:    return "protect"
-        case .general:    return "general"
-        }
-    }
-}
+// PaywallTrigger is now a String-backed enum — rawValue is synthesized automatically.
+// The manual extension above has been removed to avoid redeclaration conflicts.
 
 // MARK: - PaywallHeaderView
 
@@ -432,25 +502,20 @@ struct PricingCardView: View {
                 Text(planLabel)
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundColor(Color("TextMuted")).tracking(0.7).textCase(.uppercase)
-
                 Text(price)
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(isSelected ? Color("PrimaryGreen") : Color("TextPrimary"))
-
                 Text(description)
                     .font(.system(size: 16, weight: .medium)).foregroundColor(Color("TextPrimary"))
                     .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-
                 Text(subtext)
                     .font(.system(size: 13)).foregroundColor(Color("TextMuted"))
                     .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-
                 if !choosetext.isEmpty {
                     Text(choosetext)
                         .font(.system(size: 12)).foregroundColor(Color("TextMuted"))
                         .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                 }
-
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -458,11 +523,9 @@ struct PricingCardView: View {
             .padding(16)
             .background(Color("Surface"))
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                    .stroke(isSelected ? Color("PrimaryGreen") : Color("Hairline"),
-                            lineWidth: isSelected ? 2 : 1)
-            )
+            .overlay(RoundedRectangle(cornerRadius: 18)
+                .stroke(isSelected ? Color("PrimaryGreen") : Color("Hairline"),
+                        lineWidth: isSelected ? 2 : 1))
             .shadow(color: isSelected ? Color("Hairline").opacity(0.28) : .clear,
                     radius: isSelected ? 8 : 0, y: isSelected ? 4 : 0)
             .scaleEffect(isSelected ? 1.0 : 0.985)
@@ -487,51 +550,60 @@ struct PricingCardView: View {
 
 struct FeatureRowView: View {
     let title: String
-
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(Color("AccentGreen"))
-                .frame(width: 20, height: 20)
-            Text(title).font(.system(size: 15)).foregroundColor(Color("TextPrimary"))
-            Spacer()
+        HStack(spacing: 10) {
+            PaywallCheckGlyph()
+            Text(title).font(.system(size: 13.5)).foregroundColor(Color("TextPrimary"))
+            Spacer(minLength: 0)
         }
-        .frame(minHeight: 44)
+    }
+}
+
+private struct PaywallCheckGlyph: View {
+    var body: some View {
+        Canvas { context, size in
+            let scale = min(size.width, size.height) / 24
+            var path = Path()
+            path.move(to: CGPoint(x: 5 * scale, y: 12.5 * scale))
+            path.addLine(to: CGPoint(x: 9.5 * scale, y: 17 * scale))
+            path.addLine(to: CGPoint(x: 19 * scale, y: 7 * scale))
+            context.stroke(path, with: .color(Color("AccentGreen")),
+                           style: StrokeStyle(lineWidth: 2.4 * scale, lineCap: .round, lineJoin: .round))
+        }
+        .frame(width: 16, height: 16)
     }
 }
 
 // MARK: - ScanLimitBanner
 
 struct ScanLimitBanner: View {
-    let scanLimitManager: ScanLimitManager
+    // @ObservedObject so the banner re-renders whenever scansUsedThisMonth changes.
+    // `let` only captures the initial value; @Published updates are silently ignored.
+    @ObservedObject var scanLimitManager: ScanLimitManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 0) {
                 Text("You've used ")
-                Text("5")
+                Text("\(scanLimitManager.scansUsedThisMonth)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundColor(Color("Warn"))
                 Text(" of ")
-                Text("5")
+                Text("\(ScanLimitManager.freeMonthlyLimit)")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundColor(Color("TextPrimary"))
                 Text(" free scans this month.")
             }
             .font(.system(size: 13)).foregroundColor(Color("TextPrimary"))
-
             HStack(spacing: 0) {
                 Text("Resets ")
                 Text(scanLimitManager.nextResetFormatted)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(Color("TextPrimary"))
+                    .font(.system(size: 13, design: .monospaced)).foregroundColor(Color("TextPrimary"))
                 Text(" — or upgrade now.")
             }
             .font(.system(size: 13)).foregroundColor(Color("TextMuted"))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
         .background(Color("Background"))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color("Hairline"), lineWidth: 1))

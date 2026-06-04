@@ -60,7 +60,10 @@ final class DocumentFolder {
     var name: String
     var dateCreated: Date
     var colorHex: String
-    @Relationship(deleteRule: .nullify, inverse: \ScannedDocument.folder)
+    // .cascade: deleting a folder removes all its ScannedDocument records from
+    // SwiftData. FolderHierarchyService.deleteFolder() removes the PDF files from
+    // disk BEFORE calling context.delete(folder) so no orphaned files are left.
+    @Relationship(deleteRule: .cascade, inverse: \ScannedDocument.folder)
     var documents: [ScannedDocument]
 
     init(

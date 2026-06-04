@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ScanHonest .gitignore
+# Architecture source code lives on main.
+# Design files → branch: design
+# Unit & UI tests → branch: testing
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── macOS system files ────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── Xcode build artefacts ─────────────────────────────────────────────────────
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+
+# ── SPM / CocoaPods / Carthage ────────────────────────────────────────────────
+Pods/
+Carthage/Build/
+.build/
+*.resolved           # keep Package.resolved if you use SPM (comment this out)
+
+# ── Xcode user-specific settings (DO keep project.pbxproj — it defines targets)
+*.xcworkspace/xcuserdata/
+ScanHonest.xcodeproj/xcuserdata/
+ScanHonest.xcodeproj/project.xcworkspace/xcuserdata/
+
+# ── Secrets / credentials ─────────────────────────────────────────────────────
+*.p12
+*.mobileprovision
+*.cer
+*.pem
+AuthKey_*.p8
+secrets.xcconfig
+GoogleService-Info.plist
+
+# ── Temp / editor noise ───────────────────────────────────────────────────────
+*.log
+*.tmp
+_navfix.txt
+.cursor/
+.vscode/
+*.swp
+*~
+
+# ── Design folder (tracked on the `design` branch, not main) ─────────────────
+Design/
+
+# ── Test targets (tracked on the `testing` branch, not main) ─────────────────
+ScanHonestTests/
+ScanHonestUITests/
+
+# ── AppStore screenshots (large HTML files, keep locally) ────────────────────
+AppStore/Screenshots/
+
+# ── StoreKit local config (dev-only, never ship secrets to GitHub) ────────────
+# ScanHonest/ScanHonest.storekit   ← uncomment to exclude from GitHub too
