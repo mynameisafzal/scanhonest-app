@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ScanHonest — Icon & Launch</title>
+<style>
+  :root {
+    --primary: #1B4332;
+    --secondary: #2D6A4F;
+    --accent: #74C69D;
+    --bg: #F8F9FA;
+    --surface: #FFFFFF;
+    --text: #1A1A1A;
+    --muted: #6C757D;
+    --hairline: rgba(60,60,67,0.12);
+    --canvas: #f0eee9;
+    --font: -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--canvas); font-family: var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  .page { max-width: 1280px; margin: 0 auto; padding: 40px 32px 80px; }
+  .hdr { padding-bottom: 22px; border-bottom: 1px solid var(--hairline); margin-bottom: 36px; }
+  .hdr h1 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.7px; }
+  .hdr .sub { color: var(--muted); font-size: 14px; margin-top: 6px; max-width: 70ch; line-height: 1.5; }
+
+  section { margin-bottom: 64px; }
+  .sect-head h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+  .sect-head .sub { color: var(--muted); font-size: 13.5px; margin-top: 4px; max-width: 70ch; }
+
+  /* ICONS */
+  .icon-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 24px; }
+  .opt { background: #fff; border-radius: 18px; border: 1px solid var(--hairline); overflow: hidden; }
+  .opt-head { padding: 14px 18px; border-bottom: 1px solid var(--hairline); display: flex; justify-content: space-between; align-items: baseline; }
+  .opt-name { font-size: 14px; font-weight: 700; }
+  .opt-pill { font-family: var(--mono); font-size: 10px; color: var(--muted); padding: 2px 6px; border: 1px solid var(--hairline); border-radius: 4px; letter-spacing: 0.4px; text-transform: uppercase; }
+  .opt-pill.recommended { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .opt-body { padding: 28px 24px; background: #faf9f5; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+
+  /* The 1024 icon, rendered at 240px so it's reviewable */
+  .icon-canvas { width: 240px; height: 240px; border-radius: 54px; overflow: hidden; box-shadow: 0 14px 40px rgba(20,30,25,0.14), 0 1px 3px rgba(0,0,0,0.08); }
+  /* size grid */
+  .size-grid { display: flex; gap: 18px; align-items: flex-end; }
+  .size-grid .sz { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  .specs { padding: 14px 18px; background: #fff; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: 110px 1fr; gap: 5px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .specs b { color: var(--text); font-weight: 600; }
+
+  /* Phone mock */
+  .phone {
+    width: 280px; height: 560px; border-radius: 38px; position: relative;
+    background: #000; padding: 6px; box-shadow: 0 18px 40px rgba(20,30,25,0.18), 0 0 0 1px rgba(0,0,0,0.12);
+    overflow: hidden; flex-shrink: 0;
+  }
+  .phone .scr { width: 100%; height: 100%; border-radius: 32px; overflow: hidden; position: relative; }
+  .phone .island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 90px; height: 26px; border-radius: 16px; background: #000; z-index: 5; }
+  .phone .home { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 100px; height: 4px; border-radius: 999px; background: rgba(0,0,0,0.25); }
+  .phone .home-dark { background: rgba(255,255,255,0.85); }
+
+  /* launch options */
+  .launch-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 24px; }
+  .lopt { background: #fff; border-radius: 18px; border: 1px solid var(--hairline); padding: 22px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .lopt .nm { font-size: 14px; font-weight: 700; align-self: flex-start; }
+  .lopt .ds { font-size: 12px; color: var(--muted); align-self: flex-start; }
+
+  /* home screen */
+  .homegrid { padding: 22px 18px; height: 100%; display: flex; flex-direction: column; background: linear-gradient(160deg, #5a7a96 0%, #3a4d63 100%); }
+  .homegrid .clock { color: #fff; text-align: center; font-weight: 200; font-size: 56px; letter-spacing: -1.5px; line-height: 1; padding-top: 10px; font-family: var(--font); }
+  .homegrid .date { color: rgba(255,255,255,0.85); text-align: center; font-size: 12px; margin-top: 2px; }
+  .homegrid .grid { margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 14px; padding: 12px 4px; }
+  .homegrid .app { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .homegrid .app .ic { width: 50px; height: 50px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.18); position: relative; overflow: hidden; }
+  .homegrid .app .nm { font-size: 9.5px; color: #fff; font-weight: 500; letter-spacing: 0.1px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+  .homegrid .dock {
+    margin-top: 14px; padding: 8px 10px; border-radius: 22px;
+    background: rgba(255,255,255,0.18); backdrop-filter: blur(20px);
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  }
+
+  .competitor-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 18px; background: #fff; border-radius: 14px; border: 1px solid var(--hairline); margin-top: 14px; }
+  .competitor-row .item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .competitor-row .item .ic { width: 54px; height: 54px; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  .competitor-row .item .lbl { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+  /* size preview chain */
+  .chain { display: flex; gap: 18px; align-items: flex-end; padding: 22px; background: #fff; border-radius: 14px; border: 1px solid var(--hairline); margin-top: 14px; }
+  .chain .step { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* recommendation */
+  .rec {
+    background: #fff; border-radius: 18px; border: 2px solid var(--primary);
+    padding: 22px 24px; margin-top: 24px;
+    box-shadow: 0 1px 3px rgba(20,30,25,0.06), 0 8px 24px rgba(27,67,50,0.06);
+    display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: center;
+  }
+  .rec .ic-big { width: 200px; height: 200px; border-radius: 44px; overflow: hidden; box-shadow: 0 14px 40px rgba(20,30,25,0.14); }
+  .rec h3 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.4px; }
+  .rec .why { font-size: 14px; color: var(--text); line-height: 1.55; }
+  .rec .why b { color: var(--primary); }
+
+  pre.svg-export {
+    background: #0e1a14; color: #cfe7d6; font-family: var(--mono); font-size: 11px;
+    padding: 16px; border-radius: 10px; overflow: auto; line-height: 1.5;
+    margin-top: 14px;
+  }
+
+  .pin-bar { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(116,198,157,0.15); color: var(--primary); border-radius: 999px; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr">
+    <h1>App icon &amp; launch screen</h1>
+    <p class="sub">Three icon directions, three launch directions, then a recommendation with the export-ready 1024 SVG. All icons rendered as clean flat SVG — no gradients, no inner shadows, no transparency.</p>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sect-head">
+      <h2>App icon — 3 options</h2>
+      <p class="sub">All on deep forest green (#1B4332) with mint accent (#74C69D). Square SVG; iOS adds the rounded corner mask at runtime.</p>
+    </div>
+
+    <div class="icon-row">
+      <!-- ── OPTION A: brackets ───────────────────────── -->
+      <div class="opt">
+        <div class="opt-head">
+          <div class="opt-name">A · Bracketed page</div>
+          <div class="opt-pill recommended">RECOMMENDED</div>
+        </div>
+        <div class="opt-body">
+          <div class="icon-canvas">
+            <svg viewBox="0 0 1024 1024" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" id="icon-a">
+              <rect width="1024" height="1024" fill="#1B4332"/>
+              <!-- document page -->
+              <rect x="312" y="232" width="400" height="540" rx="32" fill="#FFFFFF"/>
+              <!-- text lines on document -->
+              <rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/>
+              <rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="464" width="200" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="510" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="538" width="240" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+              <rect x="368" y="610" width="160" height="14" rx="6" fill="#1B4332" opacity="0.55"/>
+              <!-- corner brackets -->
+              <g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round">
+                <path d="M236 304 L236 236 L304 236"/>
+                <path d="M788 304 L788 236 L720 236"/>
+                <path d="M236 720 L236 788 L304 788"/>
+                <path d="M788 720 L788 788 L720 788"/>
+              </g>
+            </svg>
+          </div>
+
+          <div class="size-grid">
+            <div class="sz"><div style="width: 96px; height: 96px; border-radius: 22px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.12);">
+              <svg viewBox="0 0 1024 1024" width="100%" height="100%"><use href="#icon-a"/></svg>
+              <svg viewBox="0 0 1024 1024" width="100%" height="100%" style="display: none;"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+            </div><span>180 · @3x</span></div>
+            <div class="sz"><div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="464" width="200" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>60 · home</span></div>
+            <div class="sz"><div style="width: 32px; height: 32px; border-radius: 7px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><g fill="none" stroke="#74C69D" stroke-width="40" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>32 · settings</span></div>
+            <div class="sz"><div style="width: 20px; height: 20px; border-radius: 5px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><g fill="none" stroke="#74C69D" stroke-width="56" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>20 · notif</span></div>
+          </div>
+        </div>
+        <div class="specs">
+          <span>BG</span><b>#1B4332</b>
+          <span>Page</span><b>#FFFFFF · r 32</b>
+          <span>Brackets</span><b>#74C69D · stroke 28 · round caps</b>
+          <span>Symbol</span><b>document + viewfinder corners</b>
+          <span>Reads at</span><b>20 px ✓ (brackets thicken)</b>
+        </div>
+      </div>
+
+      <!-- ── OPTION B: checkmark ──────────────────────── -->
+      <div class="opt">
+        <div class="opt-head">
+          <div class="opt-name">B · Page + check</div>
+          <div class="opt-pill">VERIFIED</div>
+        </div>
+        <div class="opt-body">
+          <div class="icon-canvas">
+            <svg viewBox="0 0 1024 1024" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" id="icon-b">
+              <rect width="1024" height="1024" fill="#1B4332"/>
+              <rect x="248" y="218" width="440" height="558" rx="36" fill="#FFFFFF"/>
+              <rect x="312" y="294" width="220" height="22" rx="6" fill="#1B4332" opacity="0.85"/>
+              <rect x="312" y="350" width="312" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="312" y="378" width="280" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="312" y="406" width="312" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="312" y="434" width="240" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="312" y="462" width="290" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <!-- mint disc with check, sitting bottom-right -->
+              <circle cx="700" cy="700" r="172" fill="#74C69D"/>
+              <path d="M610 706 L676 770 L800 638" fill="none" stroke="#1B4332" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <div class="size-grid">
+            <div class="sz"><div style="width: 96px; height: 96px; border-radius: 22px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="248" y="218" width="440" height="558" rx="36" fill="#fff"/><rect x="312" y="294" width="220" height="22" rx="6" fill="#1B4332" opacity=".85"/><circle cx="700" cy="700" r="172" fill="#74C69D"/><path d="M610 706 L676 770 L800 638" fill="none" stroke="#1B4332" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>180 · @3x</span></div>
+            <div class="sz"><div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="248" y="218" width="440" height="558" rx="36" fill="#fff"/><circle cx="700" cy="700" r="172" fill="#74C69D"/><path d="M610 706 L676 770 L800 638" fill="none" stroke="#1B4332" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>60 · home</span></div>
+            <div class="sz"><div style="width: 32px; height: 32px; border-radius: 7px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="248" y="218" width="440" height="558" rx="36" fill="#fff"/><circle cx="700" cy="700" r="172" fill="#74C69D"/><path d="M610 706 L676 770 L800 638" fill="none" stroke="#1B4332" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>32 · settings</span></div>
+            <div class="sz"><div style="width: 20px; height: 20px; border-radius: 5px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="248" y="218" width="440" height="558" rx="36" fill="#fff"/><circle cx="700" cy="700" r="172" fill="#74C69D"/></svg></div><span>20 · notif</span></div>
+          </div>
+        </div>
+        <div class="specs">
+          <span>BG</span><b>#1B4332</b>
+          <span>Page</span><b>#FFFFFF · r 36</b>
+          <span>Disc</span><b>#74C69D · r 172</b>
+          <span>Check</span><b>#1B4332 · stroke 56</b>
+          <span>Reads at</span><b>20 px ✓ (disc + check)</b>
+        </div>
+      </div>
+
+      <!-- ── OPTION C: scan line ──────────────────────── -->
+      <div class="opt">
+        <div class="opt-head">
+          <div class="opt-name">C · Page + scanline</div>
+          <div class="opt-pill">MINIMAL</div>
+        </div>
+        <div class="opt-body">
+          <div class="icon-canvas">
+            <svg viewBox="0 0 1024 1024" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" id="icon-c">
+              <rect width="1024" height="1024" fill="#1B4332"/>
+              <!-- back page -->
+              <rect x="280" y="276" width="400" height="540" rx="30" fill="#FFFFFF" opacity="0.35"/>
+              <!-- middle page -->
+              <rect x="320" y="232" width="420" height="558" rx="32" fill="#FFFFFF" opacity="0.65"/>
+              <!-- front page -->
+              <rect x="360" y="190" width="436" height="576" rx="34" fill="#FFFFFF"/>
+              <rect x="416" y="270" width="240" height="22" rx="6" fill="#1B4332" opacity="0.85"/>
+              <rect x="416" y="330" width="324" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="416" y="358" width="284" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="416" y="386" width="324" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="416" y="414" width="220" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="416" y="442" width="300" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <rect x="416" y="470" width="284" height="10" rx="5" fill="#1B4332" opacity="0.18"/>
+              <!-- single mint scan line -->
+              <rect x="332" y="554" width="492" height="20" rx="10" fill="#74C69D"/>
+            </svg>
+          </div>
+
+          <div class="size-grid">
+            <div class="sz"><div style="width: 96px; height: 96px; border-radius: 22px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="280" y="276" width="400" height="540" rx="30" fill="#fff" opacity=".35"/><rect x="320" y="232" width="420" height="558" rx="32" fill="#fff" opacity=".65"/><rect x="360" y="190" width="436" height="576" rx="34" fill="#fff"/><rect x="416" y="270" width="240" height="22" rx="6" fill="#1B4332" opacity=".85"/><rect x="332" y="554" width="492" height="20" rx="10" fill="#74C69D"/></svg></div><span>180 · @3x</span></div>
+            <div class="sz"><div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="280" y="276" width="400" height="540" rx="30" fill="#fff" opacity=".35"/><rect x="320" y="232" width="420" height="558" rx="32" fill="#fff" opacity=".65"/><rect x="360" y="190" width="436" height="576" rx="34" fill="#fff"/><rect x="332" y="554" width="492" height="24" rx="12" fill="#74C69D"/></svg></div><span>60 · home</span></div>
+            <div class="sz"><div style="width: 32px; height: 32px; border-radius: 7px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="320" y="232" width="420" height="558" rx="32" fill="#fff" opacity=".7"/><rect x="360" y="190" width="436" height="576" rx="34" fill="#fff"/><rect x="332" y="554" width="492" height="36" rx="18" fill="#74C69D"/></svg></div><span>32 · settings</span></div>
+            <div class="sz"><div style="width: 20px; height: 20px; border-radius: 5px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="360" y="190" width="436" height="576" rx="34" fill="#fff"/><rect x="332" y="554" width="492" height="56" rx="28" fill="#74C69D"/></svg></div><span>20 · notif</span></div>
+          </div>
+        </div>
+        <div class="specs">
+          <span>BG</span><b>#1B4332</b>
+          <span>Stack</span><b>3 pages · 35/65/100% opacity</b>
+          <span>Scan line</span><b>#74C69D · h 20 · r 10</b>
+          <span>Risk</span><b>at 20 px the stack flattens</b>
+          <span>Reads at</span><b>20 px ⚠ (line OK, stack lost)</b>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sect-head">
+      <h2>Launch screen — 3 options</h2>
+      <p class="sub">Visible ~500 ms. The launch should feel like a held breath, not a billboard.</p>
+    </div>
+
+    <div class="launch-row">
+      <!-- A: Minimal light -->
+      <div class="lopt">
+        <div class="nm">A · Minimal light <span class="pin-bar" style="margin-left: 8px;">RECOMMENDED</span></div>
+        <div class="ds">Off-white BG, icon centered with wordmark below. Fast and confident.</div>
+        <div class="phone">
+          <div class="island"></div>
+          <div class="scr" style="background: #F8F9FA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;">
+            <div style="width: 80px; height: 80px; border-radius: 18px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,30,25,0.1);">
+              <svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+            </div>
+            <div style="font-size: 19px; font-weight: 600; color: #1B4332; letter-spacing: -0.3px;">ScanHonest</div>
+          </div>
+          <div class="home"></div>
+        </div>
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); align-self: stretch; padding-top: 8px; border-top: 1px solid var(--hairline); line-height: 1.6;">
+          BG <b style="color: var(--text)">#F8F9FA</b><br/>
+          Icon 80 px @ center<br/>
+          Wordmark SF Pro 19 / 600 / -0.3 / #1B4332
+        </div>
+      </div>
+
+      <!-- B: Brand green -->
+      <div class="lopt">
+        <div class="nm">B · Brand green</div>
+        <div class="ds">Saturated brand moment. Tagline included as quiet mint sub-line.</div>
+        <div class="phone">
+          <div class="island"></div>
+          <div class="scr" style="background: #1B4332; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;">
+            <!-- white symbol only, no rounded plate -->
+            <svg viewBox="0 0 1024 1024" width="80" height="80">
+              <rect x="312" y="232" width="400" height="540" rx="32" fill="#FFFFFF"/>
+              <rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/>
+              <rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/>
+              <rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/>
+              <rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/>
+              <g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round">
+                <path d="M236 304 L236 236 L304 236"/>
+                <path d="M788 304 L788 236 L720 236"/>
+                <path d="M236 720 L236 788 L304 788"/>
+                <path d="M788 720 L788 788 L720 788"/>
+              </g>
+            </svg>
+            <div style="font-size: 22px; font-weight: 600; color: #fff; letter-spacing: -0.4px;">ScanHonest</div>
+            <div style="font-size: 12px; color: #74C69D; letter-spacing: 0.2px;">The scanner that respects you.</div>
+          </div>
+          <div class="home home-dark"></div>
+        </div>
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); align-self: stretch; padding-top: 8px; border-top: 1px solid var(--hairline); line-height: 1.6;">
+          BG <b style="color: var(--text)">#1B4332</b><br/>
+          Symbol-only 80 px (no plate)<br/>
+          Wordmark SF Pro 22 / 600 / #fff<br/>
+          Tagline 12 / 400 / #74C69D
+        </div>
+      </div>
+
+      <!-- C: Animated -->
+      <div class="lopt">
+        <div class="nm">C · Animated</div>
+        <div class="ds">Light BG. Icon scales 0.8 → 1.0 (220ms), wordmark slides up (180ms, 60ms delay).</div>
+        <div class="phone">
+          <div class="island"></div>
+          <div class="scr" style="background: #F8F9FA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; position: relative;">
+            <div id="anim-icon" style="width: 80px; height: 80px; border-radius: 18px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,30,25,0.1);">
+              <svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+            </div>
+            <div id="anim-word" style="font-size: 19px; font-weight: 600; color: #1B4332;">ScanHonest</div>
+          </div>
+          <div class="home"></div>
+        </div>
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); align-self: stretch; padding-top: 8px; border-top: 1px solid var(--hairline); line-height: 1.6;">
+          0 → 60 ms idle<br/>
+          60 → 280 ms icon scale .8 → 1.0 ease-out<br/>
+          120 → 300 ms wordmark y +12 → 0 fade<br/>
+          400 ms total · ease-out · no bounce
+        </div>
+      </div>
+    </div>
+
+    <style>
+      @keyframes shIcon { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+      @keyframes shWord { 0% { transform: translateY(12px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      #anim-icon { animation: shIcon 220ms cubic-bezier(.2,.7,.3,1) 60ms both; }
+      #anim-word { animation: shWord 180ms cubic-bezier(.2,.7,.3,1) 120ms both; }
+    </style>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sect-head">
+      <h2>In context</h2>
+      <p class="sub">The chosen icon (A) on a real iOS home screen, alongside competitor icons, and at every system size.</p>
+    </div>
+
+    <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; margin-top: 22px;">
+      <!-- home screen -->
+      <div class="phone">
+        <div class="island"></div>
+        <div class="scr">
+          <div class="homegrid">
+            <div class="clock">9:41</div>
+            <div class="date">Wednesday, April 29</div>
+            <div class="grid">
+              <!-- row 1 -->
+              <div class="app"><div class="ic" style="background: #007aff; display: grid; place-items: center; color: #fff; font-weight: 700;">📷</div><div class="nm">Camera</div></div>
+              <div class="app"><div class="ic" style="background: #34c759; display: grid; place-items: center; color: #fff; font-weight: 700;">⌘</div><div class="nm">Notes</div></div>
+              <div class="app"><div class="ic" style="background: #ff3b30; display: grid; place-items: center; color: #fff; font-weight: 700;">M</div><div class="nm">Mail</div></div>
+              <div class="app"><div class="ic" style="background: #5856d6; display: grid; place-items: center; color: #fff; font-weight: 700;">A</div><div class="nm">App Store</div></div>
+              <!-- row 2 - our app -->
+              <div class="app"><div class="ic" style="overflow: hidden;">
+                <svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="36" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+              </div><div class="nm" style="color: #74C69D; font-weight: 700;">ScanHonest</div></div>
+              <div class="app"><div class="ic" style="background: #ffcc00; display: grid; place-items: center; font-weight: 700;">☀</div><div class="nm">Weather</div></div>
+              <div class="app"><div class="ic" style="background: #1c1c1e; color: #fff; display: grid; place-items: center; font-weight: 700;">𝕏</div><div class="nm">X</div></div>
+              <div class="app"><div class="ic" style="background: #25d366; display: grid; place-items: center; color: #fff; font-weight: 700;">W</div><div class="nm">WhatsApp</div></div>
+              <!-- row 3 -->
+              <div class="app"><div class="ic" style="background: #ff9500; display: grid; place-items: center; color: #fff; font-weight: 700;">⏰</div><div class="nm">Clock</div></div>
+              <div class="app"><div class="ic" style="background: linear-gradient(135deg, #ff5e3a, #ff2d55); display: grid; place-items: center; color: #fff; font-weight: 700;">♫</div><div class="nm">Music</div></div>
+              <div class="app"><div class="ic" style="background: #af52de; display: grid; place-items: center; color: #fff; font-weight: 700;">⚙</div><div class="nm">Settings</div></div>
+              <div class="app"><div class="ic" style="background: #5ac8fa; display: grid; place-items: center; color: #fff; font-weight: 700;">☁</div><div class="nm">Files</div></div>
+            </div>
+            <div class="dock">
+              <div class="app"><div class="ic" style="background: #34c759;">✆</div></div>
+              <div class="app"><div class="ic" style="background: #007aff;">✉</div></div>
+              <div class="app"><div class="ic" style="background: #ff9500;">♪</div></div>
+              <div class="app"><div class="ic" style="background: #007aff;">⌖</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="home home-dark"></div>
+      </div>
+
+      <div style="flex: 1; min-width: 320px;">
+        <!-- competitor row -->
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase;">vs · category</div>
+        <div class="competitor-row">
+          <div class="item">
+            <div class="ic" style="overflow: hidden;">
+              <svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><g fill="none" stroke="#74C69D" stroke-width="40" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+            </div>
+            <div class="lbl" style="color: var(--primary); font-weight: 700;">SCANHONEST</div>
+          </div>
+          <div class="item"><div class="ic" style="background: #2D7CD6; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 22px;">iS</div><div class="lbl">iScanner</div></div>
+          <div class="item"><div class="ic" style="background: #EB1000; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 22px;">A</div><div class="lbl">Adobe Scan</div></div>
+          <div class="item"><div class="ic" style="background: #1A73E8; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 16px;">CS</div><div class="lbl">CamScanner</div></div>
+          <div class="item"><div class="ic" style="background: #0078D4; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 22px;">L</div><div class="lbl">MS Lens</div></div>
+        </div>
+
+        <!-- size chain -->
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 22px;">Size chain · 1024 → 20</div>
+        <div class="chain">
+          <div class="step"><div style="width: 120px; height: 120px; border-radius: 27px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="464" width="200" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>1024 / store</span></div>
+          <div class="step"><div style="width: 80px; height: 80px; border-radius: 18px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="32" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>180 / @3x</span></div>
+          <div class="step"><div style="width: 60px; height: 60px; border-radius: 14px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><g fill="none" stroke="#74C69D" stroke-width="36" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>60 / spotlight</span></div>
+          <div class="step"><div style="width: 40px; height: 40px; border-radius: 9px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><g fill="none" stroke="#74C69D" stroke-width="44" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>40 / settings</span></div>
+          <div class="step"><div style="width: 29px; height: 29px; border-radius: 6px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><g fill="none" stroke="#74C69D" stroke-width="56" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>29 / setting</span></div>
+          <div class="step"><div style="width: 20px; height: 20px; border-radius: 5px; overflow: hidden;"><svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><g fill="none" stroke="#74C69D" stroke-width="72" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg></div><span>20 / notif</span></div>
+        </div>
+
+        <!-- App Store row -->
+        <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 22px;">App Store listing</div>
+        <div style="margin-top: 14px; padding: 18px; background: #fff; border-radius: 14px; border: 1px solid var(--hairline); display: flex; gap: 16px; align-items: center;">
+          <div style="width: 96px; height: 96px; border-radius: 22px; overflow: hidden; box-shadow: 0 6px 14px rgba(0,0,0,0.08); flex-shrink: 0;">
+            <svg viewBox="0 0 1024 1024" width="100%" height="100%"><rect width="1024" height="1024" fill="#1B4332"/><rect x="312" y="232" width="400" height="540" rx="32" fill="#fff"/><rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/><rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity=".22"/><rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity=".22"/><g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"><path d="M236 304 L236 236 L304 236"/><path d="M788 304 L788 236 L720 236"/><path d="M236 720 L236 788 L304 788"/><path d="M788 720 L788 788 L720 788"/></g></svg>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 17px; font-weight: 600;">ScanHonest</div>
+            <div style="font-size: 13px; color: var(--muted); margin-top: 2px;">The scanner that respects you.</div>
+            <div style="font-size: 12px; color: var(--muted); margin-top: 6px; font-family: var(--mono);">★ 4.9 · Productivity · 12 MB</div>
+          </div>
+          <div style="padding: 6px 18px; border-radius: 999px; background: rgba(60,60,67,0.08); color: var(--primary); font-size: 14px; font-weight: 600;">GET</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sect-head">
+      <h2>Recommendation</h2>
+    </div>
+
+    <div class="rec">
+      <div class="ic-big">
+        <svg viewBox="0 0 1024 1024" width="100%" height="100%">
+          <rect width="1024" height="1024" fill="#1B4332"/>
+          <rect x="312" y="232" width="400" height="540" rx="32" fill="#FFFFFF"/>
+          <rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/>
+          <rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="464" width="200" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="510" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="538" width="240" height="10" rx="5" fill="#1B4332" opacity="0.22"/>
+          <rect x="368" y="610" width="160" height="14" rx="6" fill="#1B4332" opacity="0.55"/>
+          <g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round">
+            <path d="M236 304 L236 236 L304 236"/>
+            <path d="M788 304 L788 236 L720 236"/>
+            <path d="M236 720 L236 788 L304 788"/>
+            <path d="M788 720 L788 788 L720 788"/>
+          </g>
+        </svg>
+      </div>
+      <div>
+        <h3>Option A — Bracketed page</h3>
+        <p class="why">
+          A wins because it tells the function story (<b>document + scanning</b>) without leaning on a camera lens — every competitor uses a lens. The mint corner brackets are a quiet visual signature that survives at 20 px. The forest-green field separates us from the saturated blue/red category. Option B reads as "verified", but the disc dominates and risks looking like a generic "approved" badge. Option C is the most editorial, but the page-stack is fragile at small sizes.
+        </p>
+        <p class="why" style="margin-top: 10px;">
+          Pair with launch screen <b>A · Minimal light</b>: same tone as the home/library, no jarring brand-flash, ships in &lt; 500 ms.
+        </p>
+      </div>
+    </div>
+
+    <div style="font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 28px;">Final 1024 SVG · ready for Xcode export</div>
+    <pre class="svg-export">&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"&gt;
+  &lt;rect width="1024" height="1024" fill="#1B4332"/&gt;
+  &lt;rect x="312" y="232" width="400" height="540" rx="32" fill="#FFFFFF"/&gt;
+  &lt;rect x="368" y="320" width="200" height="22" rx="6" fill="#1B4332"/&gt;
+  &lt;rect x="368" y="380" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="408" width="248" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="436" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="464" width="200" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="510" width="288" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="538" width="240" height="10" rx="5" fill="#1B4332" opacity="0.22"/&gt;
+  &lt;rect x="368" y="610" width="160" height="14" rx="6" fill="#1B4332" opacity="0.55"/&gt;
+  &lt;g fill="none" stroke="#74C69D" stroke-width="28" stroke-linecap="round"&gt;
+    &lt;path d="M236 304 L236 236 L304 236"/&gt;
+    &lt;path d="M788 304 L788 236 L720 236"/&gt;
+    &lt;path d="M236 720 L236 788 L304 788"/&gt;
+    &lt;path d="M788 720 L788 788 L720 788"/&gt;
+  &lt;/g&gt;
+&lt;/svg&gt;</pre>
+
+    <div style="margin-top: 16px; padding: 14px 18px; background: #fff; border-radius: 12px; border: 1px solid var(--hairline); display: grid; grid-template-columns: 110px 1fr; gap: 5px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted);">
+      <span>Xcode set</span><b style="color: var(--text);">AppIcon.appiconset</b>
+      <span>Source</span><b style="color: var(--text);">1024 PNG (no alpha) — flatten white onto green if needed</b>
+      <span>Color profile</span><b style="color: var(--text);">sRGB</b>
+      <span>Plist</span><b style="color: var(--text);">CFBundleIcons → Primary → AppIcon</b>
+      <span>Launch</span><b style="color: var(--text);">UILaunchStoryboardName → ScanHonestLaunch (option A)</b>
+    </div>
+  </section>
+</div>
+</body>
+</html>
