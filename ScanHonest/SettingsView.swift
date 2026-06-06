@@ -189,12 +189,14 @@ struct SettingsView: View {
                 userPlan: userPlan,
                 remainingScans: scanLimitManager.scansRemaining,
                 lifetimePrice: storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99",
-                onUpgrade: { showPaywall = true }
+                onUpgrade: { showPaywall = true },
+                subscriptionStatus: storeKitManager.subscriptionStatus,
+                renewalDate: storeKitManager.subscriptionRenewalDate
             )
             Divider()
             if isPro {
                 SettingsRowView(
-                    icon: "arrow.up.right.square",
+                    icon: "creditcard",
                     title: "Manage Subscription",
                     accessory: .chevron,
                     showsDivider: true
@@ -784,22 +786,30 @@ private struct AboutLinkRow: View {
 }
 
 // MARK: - SettingsSectionView
+//
+// Design 8 spec: the section LABEL sits BELOW the card content, not above.
+// This matches the design where the Pro banner is the dominant element
+// and "ACCOUNT" appears as a caption underneath it.
 
 struct SettingsSectionView<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundColor(Color("TextMuted"))
-                .tracking(0.8)
-                .padding(.horizontal, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            // Content card first
             VStack(spacing: 0) { content }
                 .background(Color("Surface"))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color("Hairline"), lineWidth: 1))
+
+            // Section label BELOW the card
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(Color("TextMuted"))
+                .tracking(0.8)
+                .padding(.horizontal, 6)
+                .padding(.top, 8)
         }
     }
 }
@@ -811,7 +821,36 @@ struct PromoCardView: View {
     let remainingScans: Int
     let lifetimePrice: String
     let onUpgrade: () -> Void
+    // Pass these in so PromoCardView knows subscription type + renewal date
+    var subscriptionStatus: SubscriptionStatus = .none
+    var renewalDate: Date? = nil
     private var isPro: Bool { userPlan == .pro }
+
+    private var planTitle: String {
+        switch subscriptionStatus {
+        case .lifetime:          return "Lifetime · Unlimited"
+        case .active, .expiring: return "Monthly · Unlimited"
+        default:                 return "Pro · Active"
+        }
+    }
+
+    private var planSubtitle: String {
+        switch subscriptionStatus {
+        case .lifetime:
+            return "Purchased \u{00B7} \(lifetimePrice)"
+        case .active:
+            if let date = renewalDate {
+                let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
+                return "Renews \(f.string(from: date))"
+            }
+            return "Renews monthly"
+        case .expiring(let date):
+            let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
+            return "Cancels \(f.string(from: date))"
+        default:
+            return "Active"
+        }
+    }
 
     var body: some View {
         Group {
@@ -823,9 +862,9 @@ struct PromoCardView: View {
                         Text("SCANHONEST PRO")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
                             .foregroundColor(.white.opacity(0.82)).tracking(1.2)
-                        Text("Lifetime · Unlimited")
+                        Text(planTitle)
                             .font(.system(size: 22, weight: .bold)).foregroundColor(.white)
-                        Text("Purchased · \(lifetimePrice)")
+                        Text(planSubtitle)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundColor(.white.opacity(0.82))
                     }
@@ -881,14 +920,15 @@ struct SettingsRowView: View {
                 }
                 Spacer(minLength: 12)
                 if accessory == .chevron {
+                    // Standard iOS settings arrow: small, medium weight, muted grey
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color("TextMuted"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color("TextMuted").opacity(0.6))
                 }
             }
             .frame(minHeight: 44)
             .padding(.horizontal, 16).padding(.vertical, 8)
-            .contentShape(Rectangle())          // full row is tappable, not just visible content
+            .contentShape(Rectangle())
             .background(alignment: .bottom) {
                 if showsDivider { Divider() }
             }
@@ -955,10 +995,26 @@ struct SettingsValueRowView: View {
     }
 }
 
+// MARK: - SettingsIconView
+//
+// Renders a square icon badge: green-tinted rounded square background
+// with the SF Symbol centred in white. Matches the design spec for all
+// settings rows — currently was EmptyView() which made all icons invisible.
+
 struct SettingsIconView: View {
     let systemName: String
+    var color: Color = Color("PrimaryGreen")
+
     var body: some View {
-        EmptyView()
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(color.opacity(0.12))
+                .frame(width: 32, height: 32)
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(color)
+        }
+        .frame(width: 32, height: 32)
     }
 }
 

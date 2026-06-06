@@ -243,16 +243,24 @@ final class ShareExportService {
             throw ShareExportError.fileMissing(src.lastPathComponent)
         }
 
-        // Snapshot `compact` on @MainActor — evaluating ShareExportFormat.== inside
-        // Task.detached triggers a Swift 6 warning because the synthesised Equatable
-        // conformance is inferred as @MainActor-isolated in this file.
+        // ── Decrypt on @MainActor before crossing into Task.detached ──────
+        // The PDF is AES-256-GCM encrypted on disk. PDFDocument(url:) reads
+        // raw bytes — it gets ciphertext, returns nil, and we throw
+        // "Could not open PDF for password protection".
+        // Fix: call StorageManager.shared.loadPDF() here (on @MainActor, safe)
+        // and pass the already-decrypted Data into the detached task.
+        guard let decryptedPDF = StorageManager.shared.loadPDF(from: src),
+              let pdfData = decryptedPDF.dataRepresentation() else {
+            throw ShareExportError.exportFailed("Could not decrypt PDF for password protection")
+        }
+
         let compact = (format == .pdfCompact)
 
         let urls: [URL] = try await Task.detached(priority: .userInitiated) {
             let url = try Self.exportPDFWithPassword(
-                sourceURL: src,
-                name: docName,
-                compact: compact,
+                pdfData:  pdfData,
+                name:     docName,
+                compact:  compact,
                 password: password
             )
             return [url]
@@ -271,10 +279,13 @@ final class ShareExportService {
         return urls
     }
 
+    // Password-protected PDF export — nonisolated, called from Task.detached.
+    // Receives already-decrypted Data so it never touches StorageManager or disk
+    // encryption from a background thread.
     private nonisolated static func exportPDFWithPassword(
-        sourceURL: URL,
-        name: String,
-        compact: Bool,
+        pdfData:  Data,
+        name:     String,
+        compact:  Bool,
         password: String
     ) throws -> URL {
         let safeName = safeFSName(name)
@@ -282,8 +293,18 @@ final class ShareExportService {
                            .appendingPathComponent("\(safeName)_protected.pdf")
         try? FileManager.default.removeItem(at: destURL)
 
-        guard let pdf = PDFDocument(url: sourceURL) else {
-            throw ShareExportError.exportFailed("Could not open PDF for password protection")
+        // Build PDFDocument from decrypted in-memory data
+        guard let pdf = PDFDocument(data: pdfData) else {
+            throw ShareExportError.exportFailed("Could not parse decrypted PDF data")
+        }
+
+        // Optionally re-serialise for compact mode before adding password
+        let sourcePDF: PDFDocument
+        if compact, let reserialised = pdf.dataRepresentation(),
+           let compactPDF = PDFDocument(data: reserialised) {
+            sourcePDF = compactPDF
+        } else {
+            sourcePDF = pdf
         }
 
         let options: [PDFDocumentWriteOption: Any] = [
@@ -291,14 +312,47 @@ final class ShareExportService {
             .ownerPasswordOption: password,
         ]
 
-        guard pdf.write(to: destURL, withOptions: options) else {
+        guard sourcePDF.write(to: destURL, withOptions: options) else {
             throw ShareExportError.exportFailed("Password-protected PDF write failed")
         }
 
         return destURL
     }
 
-    // MARK: - Present share sheet
+    // MARK: - Present (with docName + thumbnail for share sheet subject/title)
+    //
+    // Used by NativeShareSheetView. Behaves identically to present(urls:target:cleanup:)
+    // but sets the subject/title on the activity view controller so Mail, Notes, etc.
+    // receive a meaningful document name instead of a raw UUID filename.
+
+    func presentRich(
+        urls: [URL],
+        target: ShareTarget,
+        docName: String,
+        thumbnailData: Data?,
+        cleanup: @escaping ([URL]) -> Void
+    ) {
+        guard let topVC = Self.topmostViewController() else { cleanup(urls); return }
+
+        let av = UIActivityViewController(activityItems: urls, applicationActivities: nil)
+        av.setValue(docName, forKey: "subject")   // used by Mail as email subject
+
+        let excluded = Self.excludedTypes(for: target)
+        if !excluded.isEmpty { av.excludedActivityTypes = excluded }
+
+        av.completionWithItemsHandler = { _, _, _, _ in cleanup(urls) }
+
+        if let pop = av.popoverPresentationController {
+            pop.sourceView = topVC.view
+            pop.sourceRect = CGRect(x: topVC.view.bounds.midX, y: topVC.view.bounds.midY, width: 1, height: 1)
+            pop.permittedArrowDirections = []
+        }
+
+        logger.info("presentRich: presenting for '\(docName)'")
+        topVC.present(av, animated: true)
+    }
+
+    // MARK: - Present
     //
     // Called AFTER prepareURLs resolves. Walks the VC hierarchy to find
     // the topmost presented controller, configures the popover anchor for

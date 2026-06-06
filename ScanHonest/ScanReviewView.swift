@@ -144,14 +144,21 @@ struct ScanReviewView: View {
                                         withAnimation(.spring(response: 0.25)) { currentPage = index }
                                     }
                                 }
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color("Hairline"), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-                                        .frame(width: 56, height: 72)
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 18, weight: .medium))
-                                        .foregroundColor(Color("TextMuted"))
-                                }
+                                    // FIX #6: "+" button now re-opens the scanner to add another page.
+                    // Previously it was a ZStack with no action — tapping did nothing.
+                    Button {
+                        isPresented = false   // close review; ScannerView re-presents
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color("Hairline"), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                                .frame(width: 56, height: 72)
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Color("TextMuted"))
+                        }
+                    }
+                    .buttonStyle(ReviewPressStyle())
                             }
                             .padding(.horizontal, 20).padding(.vertical, 8)
                         }
@@ -283,25 +290,67 @@ struct ScanReviewView: View {
     private func saveDocument(name: String, format: SaveFormat) {
         isSaving = true
         Task {
-            let pdfDocument = PDFDocument()
-            for (i, image) in processedImages.enumerated() {
-                if let page = PDFPage(image: image) { pdfDocument.insert(page, at: i) }
-            }
-            let result        = StorageManager.shared.savePDF(pdfDocument, name: name, thumbnail: processedImages.first)
-            let thumbnailData = processedImages.first?.portraitDocumentThumbnail()
-            let document = ScannedDocument(name: name, pageCount: processedImages.count,
-                                           fileSizeBytes: result?.size ?? 0,
-                                           fileURL: result?.url, thumbnailData: thumbnailData)
-            if storeKitManager.isPro, let firstImage = processedImages.first {
-                document.ocrText = try? await OCRProcessor.shared.extractText(from: firstImage)
-                if let text = document.ocrText, document.name == "Scan" {
-                    document.name = OCRProcessor.shared.suggestFileName(from: text)
+            // FIX #3: respect the format the user chose in SaveDocumentSheet.
+            // Previously the code always built a PDFDocument regardless of
+            // whether the user selected JPEG — the format parameter was ignored.
+            switch format {
+
+            case .pdf:
+                let pdfDocument = PDFDocument()
+                for (i, image) in processedImages.enumerated() {
+                    if let page = PDFPage(image: image) { pdfDocument.insert(page, at: i) }
                 }
-            }
-            await MainActor.run {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                onSave(document)
-                isSaving = false; isPresented = false
+                let result        = StorageManager.shared.savePDF(pdfDocument, name: name, thumbnail: processedImages.first)
+                let thumbnailData = processedImages.first?.portraitDocumentThumbnail()
+                let document = ScannedDocument(
+                    name: name, pageCount: processedImages.count,
+                    fileSizeBytes: result?.size ?? 0,
+                    fileURL: result?.url, thumbnailData: thumbnailData
+                )
+                if storeKitManager.isPro, let firstImage = processedImages.first {
+                    document.ocrText = try? await OCRProcessor.shared.extractText(from: firstImage)
+                    if let text = document.ocrText, document.name == "Scan" {
+                        document.name = OCRProcessor.shared.suggestFileName(from: text)
+                    }
+                }
+                await MainActor.run {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    onSave(document); isSaving = false; isPresented = false
+                }
+
+            case .jpeg:
+                // Multi-page JPEG: save each page as a separate image file.
+                // We create one ScannedDocument record pointing to the first image;
+                // additional pages are stored alongside it as _page2.jpg, _page3.jpg.
+                // The PDF viewer in DocumentDetailView will show a placeholder for
+                // JPEG-only saves — the images are accessible via the share sheet.
+                let fm       = FileManager.default
+                let docsDir  = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                                  .appendingPathComponent("ScanHonest", isDirectory: true)
+                try? fm.createDirectory(at: docsDir, withIntermediateDirectories: true)
+                let baseName = "\(UUID().uuidString)"
+                var firstURL: URL?; var totalSize: Int64 = 0
+
+                for (i, image) in processedImages.enumerated() {
+                    let suffix  = processedImages.count == 1 ? "" : "_page\(i + 1)"
+                    let fileURL = docsDir.appendingPathComponent("\(baseName)\(suffix).jpg")
+                    if let data = image.jpegData(compressionQuality: 0.88) {
+                        try? data.write(to: fileURL)
+                        totalSize += Int64(data.count)
+                        if i == 0 { firstURL = fileURL }
+                    }
+                }
+
+                let thumbnailData = processedImages.first?.portraitDocumentThumbnail()
+                let document = ScannedDocument(
+                    name: name, pageCount: processedImages.count,
+                    fileSizeBytes: totalSize,
+                    fileURL: firstURL, thumbnailData: thumbnailData
+                )
+                await MainActor.run {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    onSave(document); isSaving = false; isPresented = false
+                }
             }
         }
     }
@@ -490,13 +539,30 @@ extension UIImage {
         guard let out=f?.outputImage,let cg=CIContext().createCGImage(out,from:out.extent) else{return nil}
         return UIImage(cgImage:cg,scale:scale,orientation:imageOrientation)
     }
-    func applyingAutoEnhance()->UIImage? {
-        guard let ci=CIImage(image:self) else{return nil}
-        let f=CIFilter(name:"CIColorControls")
-        f?.setValue(ci,forKey:kCIInputImageKey);f?.setValue(1.15,forKey:kCIInputContrastKey)
-        f?.setValue(0.05,forKey:kCIInputBrightnessKey);f?.setValue(1.1,forKey:kCIInputSaturationKey)
-        guard let out=f?.outputImage,let cg=CIContext().createCGImage(out,from:out.extent) else{return nil}
-        return UIImage(cgImage:cg,scale:scale,orientation:imageOrientation)
+    // FIX #1: use the same tone-curve pipeline as the capture path.
+    // Old code used CIColorControls contrast+brightness which brightened text
+    // along with paper, making it look faded. The tone-curve approach anchors
+    // the black point so ink stays dark while paper lifts to white.
+    func applyingAutoEnhance() -> UIImage? {
+        guard let ci = CIImage(image: self) else { return nil }
+        // Apply tone curve matching DocumentEnhancementParams at mid-ISO (200-800)
+        guard let toneFilter = CIFilter(name: "CIToneCurve") else { return nil }
+        toneFilter.setValue(ci, forKey: kCIInputImageKey)
+        toneFilter.setValue(CIVector(x: 0,    y: 0),    forKey: "inputPoint0")
+        toneFilter.setValue(CIVector(x: 0.17, y: 0),    forKey: "inputPoint1")
+        toneFilter.setValue(CIVector(x: 0.55, y: 0.46), forKey: "inputPoint2")
+        toneFilter.setValue(CIVector(x: 0.92, y: 1.0),  forKey: "inputPoint3")
+        toneFilter.setValue(CIVector(x: 1.0,  y: 1.0),  forKey: "inputPoint4")
+        guard let toned = toneFilter.outputImage else { return nil }
+        // Apply contrast on top to widen ink-to-paper separation
+        guard let colorFilter = CIFilter(name: "CIColorControls") else { return nil }
+        colorFilter.setValue(toned,  forKey: kCIInputImageKey)
+        colorFilter.setValue(1.25,   forKey: kCIInputContrastKey)
+        colorFilter.setValue(0,      forKey: kCIInputBrightnessKey)
+        colorFilter.setValue(1.0,    forKey: kCIInputSaturationKey)
+        guard let out = colorFilter.outputImage,
+              let cg  = CIContext().createCGImage(out, from: out.extent) else { return nil }
+        return UIImage(cgImage: cg, scale: scale, orientation: imageOrientation)
     }
     func rotated(by degrees:CGFloat)->UIImage? {
         let rad=degrees * .pi/180

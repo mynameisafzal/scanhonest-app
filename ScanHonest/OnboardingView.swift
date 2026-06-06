@@ -15,10 +15,9 @@ struct OnboardingView: View {
             TabView(selection: $currentPage) {
                 OnboardingSlide1(currentPage: $currentPage).tag(0)
                 OnboardingSlide2(currentPage: $currentPage).tag(1)
-                OnboardingSlide3(currentPage: $currentPage).tag(2)
                 PermissionsSlide(onComplete: {
                     withAnimation(.easeInOut(duration: 0.35)) { hasCompletedOnboarding = true }
-                }).tag(3)
+                }).tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: currentPage)
@@ -133,7 +132,7 @@ struct OnboardingSlide1: View {
                     .padding(.top, 12)
 
                 // ── Dots ──
-                OnboardingDots(total: 4, current: 0)
+                OnboardingDots(total: 3, current: 0)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 20)
                     .padding(.bottom, 24)
@@ -305,7 +304,7 @@ struct OnboardingSlide2: View {
                 .padding(.horizontal, 24).padding(.bottom, 14)
 
                 VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 1).frame(maxWidth: .infinity).padding(.bottom, 24)
+                    OnboardingDots(total: 3, current: 1).frame(maxWidth: .infinity).padding(.bottom, 24)
                     OnboardingPrimaryButton(title: "Continue") { withAnimation { currentPage = 2 } }
                         .accessibilityIdentifier("continueButton")
                         .padding(.horizontal, 24)
@@ -352,53 +351,6 @@ struct OnboardingPricingCard: View {
                 .offset(x: 16, y: -10)
         }
         .padding(.top, 10)
-    }
-}
-
-// MARK: - Slide 3
-
-struct OnboardingSlide3: View {
-    @Binding var currentPage: Int
-
-    var body: some View {
-        GeometryReader { geo in
-            VStack(spacing: 0) {
-                Image(systemName: "lock.icloud").font(.system(size: 64, weight: .thin))
-                    .foregroundColor(Color.shPrimary).padding(.top, 40)
-                VStack(spacing: 14) {
-                    Text("Your scans,\nyour device.").font(.system(size: 34, weight: .bold))
-                        .multilineTextAlignment(.center).foregroundColor(Color.shText)
-                    Text("Everything syncs privately via your iCloud.\nWe never see your documents.")
-                        .font(.system(size: 17)).multilineTextAlignment(.center).foregroundColor(Color.shMuted).lineSpacing(4)
-                }
-                .padding(.horizontal, 32).padding(.top, 28)
-                HStack(spacing: 20) {
-                    DevicePill(icon: "iphone", label: "iPhone")
-                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 14, weight: .medium)).foregroundColor(Color.shAccent)
-                    DevicePill(icon: "ipad", label: "iPad")
-                    Image(systemName: "arrow.left.arrow.right").font(.system(size: 14, weight: .medium)).foregroundColor(Color.shAccent)
-                    DevicePill(icon: "laptopcomputer", label: "Mac")
-                }
-                .padding(.top, 32)
-                Spacer(minLength: 0)
-                VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 2).frame(maxWidth: .infinity).padding(.bottom, 24)
-                    OnboardingPrimaryButton(title: "Set Up Permissions") { withAnimation { currentPage = 3 } }.padding(.horizontal, 24)
-                }
-                .padding(.bottom, 0)
-            }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-        }
-    }
-}
-
-struct DevicePill: View {
-    let icon: String; let label: String
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 30, weight: .light)).foregroundColor(Color.shPrimary)
-            Text(label).font(.system(size: 12)).foregroundColor(Color.shMuted)
-        }
     }
 }
 
@@ -457,7 +409,7 @@ struct PermissionsSlide: View {
 
                 // ── Bottom block: dots + CTA + Maybe Later ──
                 VStack(spacing: 0) {
-                    OnboardingDots(total: 4, current: 3)
+                    OnboardingDots(total: 3, current: 2)
                         .frame(maxWidth: .infinity)
                         .padding(.bottom, 24)
                     OnboardingPrimaryButton(title: "Allow & Continue") { requestCameraAndComplete() }

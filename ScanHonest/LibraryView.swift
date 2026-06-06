@@ -241,9 +241,9 @@ struct LibraryView: View {
                                     showPaywall    = true
                                 }
                             } label: {
-                                Text("All folders →")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(Color("TextMuted"))
+                                Text(storeKitManager.isPro ? "All folders →" : "Folders  ✦ Pro")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color("TextMuted"))
                             }
                         }
                     }
@@ -425,8 +425,24 @@ struct LibraryView: View {
         }
 
         Button {
-            guard let url = document.fileURL else { return }
-            ShareExportService.shared.present(urls: [url], target: .moreOptions) { _ in }
+            Task { @MainActor in
+                // FIX #2: pass through ShareExportService so the encrypted
+                // PDF is decrypted before UIActivityViewController receives it.
+                // The old code passed document.fileURL directly — sending raw
+                // AES-256-GCM ciphertext to the recipient.
+                do {
+                    let urls = try await ShareExportService.shared.prepareURLs(
+                        for: document, format: .pdf
+                    )
+                    ShareExportService.shared.presentRich(
+                        urls: urls, target: .moreOptions,
+                        docName: document.name,
+                        thumbnailData: document.thumbnailData
+                    ) { ShareExportService.shared.cleanupURLs($0) }
+                } catch {
+                    // Silent fallback — share action simply does nothing on error
+                }
+            }
         } label: { Label("Share", systemImage: "square.and.arrow.up") }
 
         Divider()
@@ -460,37 +476,50 @@ struct LibraryView: View {
     }
 
     private func importPDF(from sourceURL: URL) {
-        let fileName = "\(UUID().uuidString).pdf"
-        let destDir  = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("ScanHonest", isDirectory: true)
-        try? FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
-        let destURL = destDir.appendingPathComponent(fileName)
-        guard (try? FileManager.default.copyItem(at: sourceURL, to: destURL)) != nil else { return }
-        let attrs = try? FileManager.default.attributesOfItem(atPath: destURL.path)
-        let fileSize = (attrs?[.size] as? Int).flatMap { Int64($0) } ?? 0
-        var pageCount = 1; var thumbData: Data?
-        if let pdf = PDFDocument(url: destURL) {
-            pageCount = pdf.pageCount
-            if let page = pdf.page(at: 0) {
-                let rect = page.bounds(for: .mediaBox); let scale: CGFloat = 1.5
-                let size = CGSize(width: rect.width * scale, height: rect.height * scale)
-                let thumb = UIGraphicsImageRenderer(size: size).image { ctx in
-                    UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: size))
-                    ctx.cgContext.scaleBy(x: scale, y: scale); ctx.cgContext.translateBy(x: 0, y: rect.height)
-                    ctx.cgContext.scaleBy(x: 1, y: -1); page.draw(with: .mediaBox, to: ctx.cgContext)
-                }
-                thumbData = thumb.jpegData(compressionQuality: 0.7)
+        // FIX #5: imported PDFs must be encrypted at rest just like scanned ones.
+        // Old code used FileManager.copyItem — writing plaintext to disk.
+        // Now we read the PDF data, pass it through StorageManager.savePDF
+        // which applies AES-256-GCM encryption before writing.
+        guard let pdfDoc = PDFDocument(url: sourceURL) else { return }
+
+        var thumbData: Data?
+        if let page = pdfDoc.page(at: 0) {
+            let rect = page.bounds(for: .mediaBox); let scale: CGFloat = 1.5
+            let size = CGSize(width: rect.width * scale, height: rect.height * scale)
+            let thumb = UIGraphicsImageRenderer(size: size).image { ctx in
+                UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: size))
+                ctx.cgContext.scaleBy(x: scale, y: scale)
+                ctx.cgContext.translateBy(x: 0, y: rect.height)
+                ctx.cgContext.scaleBy(x: 1, y: -1)
+                page.draw(with: .mediaBox, to: ctx.cgContext)
             }
+            thumbData = thumb.jpegData(compressionQuality: 0.7)
         }
+
         let baseName = sourceURL.deletingPathExtension().lastPathComponent
-        saveDocument(ScannedDocument(name: baseName.isEmpty ? "Imported PDF" : baseName,
-                                     pageCount: pageCount, fileSizeBytes: fileSize,
-                                     fileURL: destURL, thumbnailData: thumbData))
+        let docName  = baseName.isEmpty ? "Imported PDF" : baseName
+
+        // savePDF encrypts with AES-256-GCM and returns the secure URL + size
+        guard let result = StorageManager.shared.savePDF(
+            pdfDoc, name: docName,
+            thumbnail: thumbData.flatMap { UIImage(data: $0) }
+        ) else { return }
+
+        saveDocument(ScannedDocument(
+            name: docName,
+            pageCount: pdfDoc.pageCount,
+            fileSizeBytes: result.size,
+            fileURL: result.url,
+            thumbnailData: thumbData
+        ), countAsScan: false)
     }
 
-    func saveDocument(_ document: ScannedDocument) {
+    func saveDocument(_ document: ScannedDocument, countAsScan: Bool = true) {
         modelContext.insert(document)
-        if !storeKitManager.isPro { scanLimitManager.recordScan() }
+        // FIX #10: only charge scan quota for actual camera scans.
+        // Importing an existing PDF/image from Files or Photos should NOT
+        // consume one of the user's 5 free monthly scans.
+        if countAsScan && !storeKitManager.isPro { scanLimitManager.recordScan() }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 

@@ -72,3 +72,4 @@ AppStore/Screenshots/
 
 # ── StoreKit local config (dev-only, never ship secrets to GitHub) ────────────
 # ScanHonest/ScanHonest.storekit   ← uncomment to exclude from GitHub too
+fix-email.sh

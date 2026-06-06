@@ -13,6 +13,7 @@ struct DocumentDetailView: View {
     @State private var showCustomShare  = false
     @State private var showNearbyShare  = false
     @State private var showExportSheet  = false
+    @State private var showOCRPanel     = false
     @State private var showLockAlert    = false
     @State private var showPaywall      = false
     @State private var paywallTrigger: PaywallView.PaywallTrigger = .ocr
@@ -103,8 +104,12 @@ struct DocumentDetailView: View {
                 onExport: { showExportSheet = true },
                 onOCR: {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    paywallTrigger = .ocr
-                    showPaywall    = true
+                    if storeKitManager.isPro {
+                        showOCRPanel = true
+                    } else {
+                        paywallTrigger = .ocr
+                        showPaywall    = true
+                    }
                 },
                 onLock: {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -136,8 +141,10 @@ struct DocumentDetailView: View {
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showCustomShare) {
-            // Design 10B share sheet implementation.
-            CustomShareSheet(
+            // FIX #4: use NativeShareSheetView (Design 10B) instead of
+            // CustomShareSheet (legacy grid icons). NativeShareSheetView
+            // was written but never wired into the presentation.
+            NativeShareSheetView(
                 document: document,
                 isPro:    storeKitManager.isPro,
                 onNearbyShare: {
@@ -146,8 +153,8 @@ struct DocumentDetailView: View {
                     }
                 }
             )
-            .presentationDetents([.height(600), .large])
-            .presentationDragIndicator(.hidden)
+            .presentationDetents([.height(560)])
+            .presentationDragIndicator(.never)
             .presentationCornerRadius(24)
         }
         .sheet(isPresented: $showNearbyShare) {
@@ -155,6 +162,11 @@ struct DocumentDetailView: View {
         }
         .sheet(isPresented: $showExportSheet) {
             ExportOptionsSheet(document: document).presentationDetents([.medium]).presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showOCRPanel) {
+            OCRPanel(document: document)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .alert("Document Protected", isPresented: $showLockAlert) {
             Button("OK", role: .cancel) {}
@@ -304,7 +316,7 @@ struct CustomShareSheet: View {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
-                    Text("Share via iOS\u{2026}")
+                    Text("Share")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
