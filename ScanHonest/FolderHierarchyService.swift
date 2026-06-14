@@ -16,7 +16,7 @@ import os.log
 //     explicitly (see the async variants below).
 
 @MainActor
-final class FolderHierarchyService {
+final class FolderHierarchyService: @unchecked Sendable {
 
     static let shared = FolderHierarchyService()
     private let logger = Logger(subsystem: "com.afzal.ScanHonest", category: "FolderHierarchy")
@@ -98,36 +98,52 @@ final class FolderHierarchyService {
 
     // MARK: - Delete Folder
 
-    /// Deletes `folder`, its SwiftData records (via .cascade), AND its files on disk.
-    ///
-    /// Call order matters:
-    ///   1. Collect file URLs while the records still exist.
-    ///   2. Remove disk files.
-    ///   3. Delete folder record — SwiftData cascade removes child ScannedDocuments.
+    /// Deletes `folder`, its SwiftData records, AND its files on disk.
+    /// SwiftData mutations happen on @MainActor (this service is @MainActor).
+    /// Disk I/O is dispatched to a background queue so it never blocks the UI.
     func deleteFolder(_ folder: DocumentFolder, in context: ModelContext) {
         let name  = folder.name
-        let docs  = folder.documents          // snapshot before cascade
+        let docs  = folder.documents
         let count = docs.count
 
-        // 1. Delete PDF files from disk
-        removeDiskFiles(for: docs)
+        // Collect file URLs while records still exist (must be on @MainActor)
+        let fileURLs = docs.compactMap { $0.fileURL }
 
-        // 2. Delete folder record → SwiftData .cascade removes child documents
+        // Delete SwiftData records immediately on main actor
+        // (.cascade rule removes child ScannedDocuments)
         context.delete(folder)
         logger.info("Deleted folder '\(name)' (\(count) document(s) cascaded).")
+
+        // Disk I/O deferred to background — non-blocking
+        if !fileURLs.isEmpty {
+            Task.detached(priority: .utility) {
+                let fm = FileManager.default
+                for url in fileURLs {
+                    do {
+                        try fm.removeItem(at: url)
+                    } catch {
+                        // Non-fatal: orphaned files are cleaned up on next launch
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Delete Document
 
     /// Deletes a single document record and its PDF file from disk.
+    /// SwiftData delete on @MainActor, file I/O on background.
     func deleteDocument(_ document: ScannedDocument, in context: ModelContext) {
-        let name = document.name
-        if let url = document.fileURL {
-            try? FileManager.default.removeItem(at: url)
-            logger.debug("Removed file: \(url.lastPathComponent)")
-        }
-        context.delete(document)
+        let name    = document.name
+        let fileURL = document.fileURL
+        context.delete(document)   // @MainActor — fast
         logger.info("Deleted document '\(name)'")
+
+        if let url = fileURL {
+            Task.detached(priority: .utility) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: - Queries

@@ -1,15 +1,17 @@
 {
   "images" : [
     {
+      "filename" : "LaunchLogo 1.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
+      "filename" : "LaunchLogo 2.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "Launch-1179x2556.png",
+      "filename" : "LaunchLogo.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

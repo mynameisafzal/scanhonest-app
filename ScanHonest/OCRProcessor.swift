@@ -1,7 +1,7 @@
 import Vision
 import UIKit
 
-class OCRProcessor {
+class OCRProcessor: @unchecked Sendable {
     static let shared = OCRProcessor()
 
     func extractText(from image: UIImage) async throws -> String {

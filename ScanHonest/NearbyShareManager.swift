@@ -62,7 +62,7 @@ struct IncomingTransferRequest {
 // nonisolated delegate callbacks hop to MainActor via Task { @MainActor in … }.
 
 @MainActor
-final class NearbyShareManager: NSObject, ObservableObject {
+final class NearbyShareManager: NSObject, ObservableObject, @unchecked Sendable {
 
     static let shared = NearbyShareManager()
 
@@ -268,7 +268,8 @@ final class NearbyShareManager: NSObject, ObservableObject {
         scheduleTransferTimeout()
 
         let progress = session.sendResource(at: url, withName: name, toPeer: peer) { [weak self] error in
-            // This completion runs on an arbitrary thread — hop to MainActor
+            // sendResource completion runs on an arbitrary thread.
+            // ShareExportService is @MainActor — must hop before calling cleanupURLs.
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.transferTimeoutTask?.cancel()
@@ -279,7 +280,6 @@ final class NearbyShareManager: NSObject, ObservableObject {
                     self.phase = .success(url)
                     self.logger.info("Send complete: \(name)")
                 }
-                // Clean up temp file after send
                 ShareExportService.shared.cleanupURLs([url])
                 self.pendingSendURL  = nil
                 self.pendingSendName = nil
@@ -313,6 +313,8 @@ final class NearbyShareManager: NSObject, ObservableObject {
         pendingProgress = nil
         connectTimeoutTask?.cancel()
         transferTimeoutTask?.cancel()
+        // ShareExportService is @MainActor and cancel() is already on @MainActor
+        // (NearbyShareManager is @MainActor), so this call is safe.
         if let pendingSendURL {
             ShareExportService.shared.cleanupURLs([pendingSendURL])
         }

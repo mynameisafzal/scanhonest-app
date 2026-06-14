@@ -59,6 +59,17 @@ struct ScannerView: View {
             .environmentObject(storeKitManager)
             .environmentObject(scanLimitManager)
         }
+        // When review is dismissed via Retake, capturedScan becomes nil and
+        // this onChange fires. We post a notification that
+        // ManualDocumentScannerViewController listens for to restart the
+        // camera session — without this the live preview stays frozen.
+        .onChange(of: capturedScan == nil ? 1 : 0) { _, val in
+            if val == 1 {
+                NotificationCenter.default.post(
+                    name: .scannerShouldRestartSession, object: nil
+                )
+            }
+        }
         // CHANGE 3: Check permission on appear — show alert if denied
         .onAppear { checkCameraPermission() }
         .alert("Camera Access Required", isPresented: $showPermissionDenied) {

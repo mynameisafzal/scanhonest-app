@@ -14,14 +14,12 @@ import SwiftUI
 //   • .passwordProtection  — locked documents stay locked; new locking blocked
 //   • .aiSmartNaming       — no read-only fallback; feature fully hidden
 //   • .homeScreenWidget    — widget shows "Pro Required" placeholder
-//   • .cloudExport         — upload blocked at service level; no read-only mode
 
 enum ProFeature: String {
     case folderOrganization = "folder_organization"
     case aiSmartNaming      = "ai_smart_naming"
     case homeScreenWidget   = "home_screen_widget"
     case passwordProtection = "password_protection"
-    case cloudExport        = "cloud_export"
 
     /// Human-readable name for logging / analytics.
     var displayName: String {
@@ -30,7 +28,6 @@ enum ProFeature: String {
         case .aiSmartNaming:      return "AI Smart Naming"
         case .homeScreenWidget:   return "Home Screen Widget"
         case .passwordProtection: return "Password Protection"
-        case .cloudExport:        return "Cloud Export"
         }
     }
 
@@ -41,7 +38,6 @@ enum ProFeature: String {
         case .aiSmartNaming:      return .aiNaming
         case .homeScreenWidget:   return .widget
         case .passwordProtection: return .protect
-        case .cloudExport:        return .cloudExport
         }
     }
 
@@ -50,7 +46,7 @@ enum ProFeature: String {
     var supportsGracefulReadOnly: Bool {
         switch self {
         case .folderOrganization, .passwordProtection: return true
-        case .aiSmartNaming, .homeScreenWidget, .cloudExport: return false
+        case .aiSmartNaming, .homeScreenWidget:        return false
         }
     }
 }

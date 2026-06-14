@@ -116,6 +116,38 @@ struct SHSecondaryButtonStyle: ButtonStyle {
 }
 
 // MARK: ─────────────────────────────────────────────
+// SHIconBadge — single source of truth for all icon badges
+// MARK: ─────────────────────────────────────────────
+//
+// Light mode: AccentSoft (#D8F0E2) bg + PrimaryGreen (#1B4332) icon  — design spec
+// Dark mode:  PrimaryGreen (#1B4332) bg + white icon                  — always visible
+//
+// Usage examples:
+//   SHIconBadge("lock.fill")                         // 32×32 settings row
+//   SHIconBadge("printer", size: 44, iconSize: 20)   // 44×44 share sheet
+//   SHIconBadge("antenna.radiowaves.left.and.right", size: 44, iconSize: 20, cornerRadius: 12)
+
+struct SHIconBadge: View {
+    let systemName: String
+    var size:         CGFloat  = 32
+    var iconSize:     CGFloat  = 15
+    var cornerRadius: CGFloat? = nil  // nil = auto (size * 0.25)
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius ?? size * 0.25)
+                .fill(scheme == .dark ? Color("PrimaryGreen") : Color("AccentSoft"))
+                .frame(width: size, height: size)
+            Image(systemName: systemName)
+                .font(.system(size: iconSize, weight: .medium))
+                .foregroundColor(scheme == .dark ? .white : Color("PrimaryGreen"))
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: ─────────────────────────────────────────────
 // BADGE SYSTEM
 // MARK: ─────────────────────────────────────────────
 
@@ -273,7 +305,7 @@ struct ScanCounterView: View {
                     Button(action: tap) {
                         Text("Upgrade →")
                             .font(SHFont.mono(11, weight: .semibold))
-                            .foregroundColor(isLimit ? Color.shDanger : Color.shPrimary)
+                            .foregroundColor(isLimit ? Color.shDanger : Color.shAccent) // FIX: shPrimary invisible in dark
                     }.buttonStyle(.plain)
                 }
             }
@@ -417,12 +449,19 @@ struct SubscriptionStateCard: View {
         Button(action: { onUpgrade?() }) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Upgrade to Pro").font(SHFont.body(17, weight: .semibold)).foregroundColor(Color.shAccent)
-                    Text("\(remaining) free scans remaining · resets \(resetDate)")
-                        .font(SHFont.caption(13)).foregroundColor(Color.shMuted)
+                    Text("Upgrade to Pro")
+                        .font(SHFont.body(17, weight: .semibold))
+                        .foregroundColor(Color.shText)  // was shAccent — low contrast in dark mode
+                    Text("\(remaining) free scans remaining \u{00B7} resets \(resetDate)")
+                        .font(SHFont.caption(13))
+                        .foregroundColor(Color.shMuted)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Color.shMuted)
+                Text("Upgrade")
+                    .font(SHFont.caption(13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.shPrimary).clipShape(Capsule())
             }
             .padding(.horizontal, SHSpacing.md).padding(.vertical, SHSpacing.md)
         }

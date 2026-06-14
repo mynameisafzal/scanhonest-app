@@ -1,8 +1,11 @@
 import SwiftUI
 import SwiftData
-import PDFKit
+@preconcurrency import PDFKit
 import PhotosUI
 import UniformTypeIdentifiers
+
+// MARK: - LibraryLayout (shared between LibraryView and FolderDetailView)
+enum LibraryLayout { case grid, list }
 
 // MARK: - LibraryView
 
@@ -41,14 +44,13 @@ struct LibraryView: View {
     @State private var importedImageItem: ImportedImageItem?
     // Delete flow — custom popup replaces confirmationDialog
     @State private var showDeletePopup = false
+    @State private var showFolderList   = false
 
     /// Stable identity wrapper for an imported UIImage.
     struct ImportedImageItem: Identifiable {
         let id = UUID()
         let image: UIImage
     }
-
-    enum LibraryLayout { case grid, list }
 
     var filteredDocuments: [ScannedDocument] {
         searchText.isEmpty ? documents : documents.filter {
@@ -210,10 +212,15 @@ struct LibraryView: View {
                                     Text("Import")
                                         .font(.system(size: 14, weight: .medium))
                                 }
-                                .foregroundColor(Color("PrimaryGreen"))
+                                // FIX 4: was PrimaryGreen (#1B4332) on AccentSoft (#1E4A38)
+                                // near-identical in dark mode = invisible
+                                // AccentGreen (#52B788) has proper contrast on AccentSoft in both modes
+                                .foregroundColor(Color("AccentGreen"))
                                 .frame(height: 44).padding(.horizontal, 16)
-                                .background(Color("PrimaryGreen").opacity(0.08))
+                                .background(Color("AccentSoft"))
                                 .cornerRadius(28)
+                                .overlay(RoundedRectangle(cornerRadius: 28)
+                                    .stroke(Color("AccentGreen").opacity(0.4), lineWidth: 1))
                             }
                             .buttonStyle(LibraryScaleStyle())
                             .accessibilityIdentifier("importButton")
@@ -235,7 +242,7 @@ struct LibraryView: View {
                             // "All Folders" — Pro gate: free users see paywall
                             Button {
                                 if storeKitManager.isPro {
-                                    // TODO: navigate to FolderListView when built
+                                    showFolderList = true
                                 } else {
                                     paywallTrigger = .folders
                                     showPaywall    = true
@@ -303,6 +310,10 @@ struct LibraryView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $selectedDocument) { DocumentDetailView(document: $0) }
             .navigationDestination(isPresented: $showSettings) { SettingsView() }
+            .navigationDestination(isPresented: $showFolderList) {
+                FolderListView()
+                    .environmentObject(storeKitManager)
+            }
             .fullScreenCover(isPresented: $showPaywall) { PaywallView(triggerContext: paywallTrigger) }
             // Custom import choice popup (11B-A) — replaces system confirmationDialog
             // Presented as a ZStack overlay so it renders above the NavigationStack.
@@ -380,19 +391,19 @@ struct LibraryView: View {
                 }
                 Button("Cancel", role: .cancel) { renamingDocument = nil }
             }
-            // MED-05: Move to Folder sheet (placeholder until folder picker is built)
-            .confirmationDialog(
-                "Move to Folder",
-                isPresented: $showMoveSheet,
-                titleVisibility: .visible
-            ) {
-                Button("All Documents") {
-                    // Default folder — no-op until folder model is built
-                    movingDocument = nil
+            // Move to Folder sheet — FolderPickerView
+            .sheet(isPresented: $showMoveSheet) {
+                if let doc = movingDocument {
+                    FolderPickerView(
+                        document: doc,
+                        isPro: storeKitManager.isPro
+                    ) {
+                        movingDocument = nil
+                    }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(24)
                 }
-                Button("Cancel", role: .cancel) { movingDocument = nil }
-            } message: {
-                Text("Folder organisation is coming soon. Your document is saved in All Documents.")
             }
         }
     }
@@ -476,42 +487,61 @@ struct LibraryView: View {
     }
 
     private func importPDF(from sourceURL: URL) {
-        // FIX #5: imported PDFs must be encrypted at rest just like scanned ones.
-        // Old code used FileManager.copyItem — writing plaintext to disk.
-        // Now we read the PDF data, pass it through StorageManager.savePDF
-        // which applies AES-256-GCM encryption before writing.
-        guard let pdfDoc = PDFDocument(url: sourceURL) else { return }
-
-        var thumbData: Data?
-        if let page = pdfDoc.page(at: 0) {
-            let rect = page.bounds(for: .mediaBox); let scale: CGFloat = 1.5
-            let size = CGSize(width: rect.width * scale, height: rect.height * scale)
-            let thumb = UIGraphicsImageRenderer(size: size).image { ctx in
-                UIColor.white.setFill(); ctx.fill(CGRect(origin: .zero, size: size))
-                ctx.cgContext.scaleBy(x: scale, y: scale)
-                ctx.cgContext.translateBy(x: 0, y: rect.height)
-                ctx.cgContext.scaleBy(x: 1, y: -1)
-                page.draw(with: .mediaBox, to: ctx.cgContext)
-            }
-            thumbData = thumb.jpegData(compressionQuality: 0.7)
+        // All heavy work off @MainActor.
+        // Named struct avoids Swift tuple-inference failures in Task.detached:
+        //   "Cannot convert value of type 'Task<Success, Never>' to '(_, _)'"
+        //   "Generic parameter 'Success' could not be inferred"
+        struct PDFLoadResult: @unchecked Sendable {
+            let pdf:   PDFDocument
+            let thumb: Data?
         }
 
-        let baseName = sourceURL.deletingPathExtension().lastPathComponent
-        let docName  = baseName.isEmpty ? "Imported PDF" : baseName
+        Task {
+            let baseName = sourceURL.deletingPathExtension().lastPathComponent
+            let docName  = baseName.isEmpty ? "Imported PDF" : baseName
 
-        // savePDF encrypts with AES-256-GCM and returns the secure URL + size
-        guard let result = StorageManager.shared.savePDF(
-            pdfDoc, name: docName,
-            thumbnail: thumbData.flatMap { UIImage(data: $0) }
-        ) else { return }
+            // Load PDF + render thumbnail off main thread.
+            // Explicit return type ':PDFLoadResult?' lets Swift infer Task<PDFLoadResult?, Never>.
+            let loaded: PDFLoadResult? = await Task.detached(priority: .userInitiated) {
+                guard let pdf = PDFDocument(url: sourceURL) else { return nil }
+                var thumb: Data?
+                if let page = pdf.page(at: 0) {
+                    let rect  = page.bounds(for: .mediaBox)
+                    let scale: CGFloat = 1.5
+                    let size  = CGSize(width: rect.width * scale, height: rect.height * scale)
+                    let img   = UIGraphicsImageRenderer(size: size).image { ctx in
+                        UIColor.white.setFill()
+                        ctx.fill(CGRect(origin: .zero, size: size))
+                        ctx.cgContext.scaleBy(x: scale, y: scale)
+                        ctx.cgContext.translateBy(x: 0, y: rect.height)
+                        ctx.cgContext.scaleBy(x: 1, y: -1)
+                        page.draw(with: .mediaBox, to: ctx.cgContext)
+                    }
+                    thumb = img.jpegData(compressionQuality: 0.7)
+                }
+                return PDFLoadResult(pdf: pdf, thumb: thumb)
+            }.value
 
-        saveDocument(ScannedDocument(
-            name: docName,
-            pageCount: pdfDoc.pageCount,
-            fileSizeBytes: result.size,
-            fileURL: result.url,
-            thumbnailData: thumbData
-        ), countAsScan: false)
+            // Guard on a named binding — avoids "Expected 'else' after guard condition"
+            guard let loaded else { return }
+
+            // Encrypt + write to disk (async, off main thread inside savePDF)
+            guard let result = await StorageManager.shared.savePDF(
+                loaded.pdf, name: docName, thumbnail: nil
+            ) else { return }
+
+            let document = ScannedDocument(
+                name:          docName,
+                pageCount:     loaded.pdf.pageCount,
+                fileSizeBytes: result.size,
+                fileURL:       result.url,
+                thumbnailData: loaded.thumb
+            )
+
+            await MainActor.run {
+                saveDocument(document, countAsScan: false)
+            }
+        }
     }
 
     func saveDocument(_ document: ScannedDocument, countAsScan: Bool = true) {
@@ -572,12 +602,12 @@ struct DocumentGridCell: View {
                         Image(uiImage: img).resizable().scaledToFill()
                     } else {
                         ZStack {
-                            Color("Surface")
+                            Color("Surface")                    // was hardcoded Color.black.opacity(0.07) — invisible in dark mode
                             VStack(alignment: .leading, spacing: 5) {
                                 Color("PrimaryGreen").opacity(0.5).frame(width: 55, height: 4).cornerRadius(1)
                                 Spacer().frame(height: 2)
                                 ForEach([0.9, 0.85, 0.92, 0.70, 0.0, 0.88, 0.60, 0.78], id: \.self) { w in
-                                    if w > 0 { Color.black.opacity(0.12).frame(width: 80 * w, height: 2) }
+                                    if w > 0 { Color("TextMuted").opacity(0.18).frame(width: 80 * w, height: 2) }
                                     else     { Spacer().frame(height: 4) }
                                 }
                             }
@@ -587,7 +617,7 @@ struct DocumentGridCell: View {
                 }
                 .aspectRatio(0.77, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.04), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color("Hairline"), lineWidth: 1))
                 .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
                 .shadow(color: .black.opacity(0.03), radius: 8, y: 2)
                 if document.pageCount > 1 {

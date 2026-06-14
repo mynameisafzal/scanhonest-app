@@ -97,10 +97,7 @@ struct OnboardingSlide1: View {
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(LinearGradient(
-                            colors: [Color(red: 0.93, green: 0.90, blue: 0.85),
-                                     Color(red: 0.88, green: 0.84, blue: 0.75)],
-                            startPoint: .top, endPoint: .bottom))
+                        .fill(Color("AccentSoft").opacity(0.6))  // was hardcoded warm gradient — jarring in dark mode
                     IllustrationDocSheet(width: cardDim * 0.52, rotation: -6,
                                         offsetX: -cardDim * 0.10, offsetY: 0)
                     IllustrationDocSheet(width: cardDim * 0.50, rotation: 8,
@@ -199,7 +196,7 @@ private struct IllustrationDocSheet: View {
                 Spacer().frame(height: 2)
                 ForEach([0.88, 0.75, 0.92, 0.65, 0.80], id: \.self) { ratio in
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.black.opacity(0.10))
+                        .fill(Color("TextMuted").opacity(0.25))  // was black.opacity(0.10) — invisible in dark mode
                         .frame(width: width * ratio, height: 3)
                 }
             }
@@ -295,12 +292,19 @@ struct OnboardingSlide2: View {
 
                 Spacer(minLength: 0)
 
+                // FIX 2: was Color.shPrimary text on Color.shAccentSoft bg
+                // In dark mode AccentSoft (#1E4A38) + shPrimary (#1B4332) = invisible
+                // Fix: white text on solid PrimaryGreen background
                 VStack(spacing: 4) {
-                    Text("You can upgrade anytime. Or never.").font(.system(size: 13)).foregroundColor(Color.shPrimary)
-                    Text("5 free scans every month, forever.").font(.system(size: 13, weight: .semibold)).foregroundColor(Color.shPrimary)
+                    Text("You can upgrade anytime. Or never.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white)
+                    Text("5 free scans every month, forever.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
                 }
                 .multilineTextAlignment(.center).frame(maxWidth: .infinity)
-                .padding(12).background(Color.shAccentSoft).cornerRadius(12)
+                .padding(12).background(Color.shPrimary).cornerRadius(12)
                 .padding(.horizontal, 24).padding(.bottom, 14)
 
                 VStack(spacing: 0) {
@@ -329,7 +333,10 @@ struct OnboardingPricingCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text(price).font(.system(size: 36, weight: .bold))
-                    .foregroundColor(isSelected ? Color.shPrimary : Color.shText)
+                    // FIX 1: was shPrimary when selected — on Surface card in dark mode
+                    // green (#1B4332) on #1E1E1E is near-invisible
+                    // Use TextPrimary always; selected state shown by border not color
+                    .foregroundColor(Color.shText)
                 Text(period).font(.system(size: 14)).foregroundColor(Color.shMuted)
             }
             Text(headline).font(.system(size: 14, weight: .medium)).foregroundColor(Color.shText).padding(.top, 2)
@@ -389,17 +396,19 @@ struct PermissionsSlide: View {
                 }
                 .padding(.top, 22)
 
-                // ── Privacy note ──
+                // FIX 3: privacy note
+                // Text was shPrimary on shAccent.opacity(0.12) — dark-on-dark in dark mode
+                // Fix: TextPrimary text on AccentSoft background (has proper dark variant)
                 HStack(alignment: .top, spacing: 10) {
                     PermissionGlyph(icon: .lock, size: 18).padding(.top, 1)
                     Text("All processing happens on your device. We never see, upload, or analyze your documents.")
                         .font(.system(size: 12.5))
-                        .foregroundColor(Color.shPrimary)
+                        .foregroundColor(Color.shText)
                         .lineSpacing(3)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.shAccent.opacity(0.12))
+                .background(Color.shAccentSoft)
                 .cornerRadius(12)
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.shAccentSoft, lineWidth: 1))
                 .padding(.top, 18)
@@ -435,7 +444,7 @@ struct PermissionsSlide: View {
         AVCaptureDevice.requestAccess(for: .video) { _ in
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { _ in
                 UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
-                    DispatchQueue.main.async { onComplete() }
+                    Task { @MainActor in onComplete() }
                 }
             }
         }
@@ -462,11 +471,14 @@ private enum PermissionIcon {
 private struct PermissionGlyph: View {
     let icon: PermissionIcon
     let size: CGFloat
+    var color: Color = Color.shAccent  // defaults to AccentGreen, pass .white for green bg
 
     var body: some View {
         Canvas { context, canvasSize in
             let scale = min(canvasSize.width, canvasSize.height) / 24
-            let color = Color.shPrimary
+            // FIX 3: was Color.shPrimary (#1B4332) — invisible on dark Surface (#1E1E1E)
+            // AccentGreen (#52B788) has sufficient contrast on both light and dark
+            let color = color
 
             func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
                 CGPoint(x: x * scale, y: y * scale)
@@ -546,12 +558,16 @@ private struct PermissionGlyph: View {
 
 private struct PermissionRow: View {
     let icon: PermissionIcon; let title: String; let description: String; let isRequired: Bool
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10).fill(Color.shAccentSoft).frame(width: 44, height: 44)
-                PermissionGlyph(icon: icon, size: icon.size)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(scheme == .dark ? Color.shPrimary : Color.shAccentSoft)
+                    .frame(width: 44, height: 44)
+                PermissionGlyph(icon: icon, size: icon.size,
+                                color: scheme == .dark ? .white : Color.shAccent)
             }.padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 4) {

@@ -1,6 +1,5 @@
 // iCloudMonitor.swift
 // Target: ScanHonest main app ONLY
-
 #if !WIDGET_EXTENSION
 
 import Foundation
@@ -8,7 +7,17 @@ import SwiftUI
 import Combine
 
 // MARK: - iCloudMonitor
+//
+// Swift 6 / strict concurrency fix:
+//   @Published mutations must happen on @MainActor. The old code used
+//   DispatchQueue.main.async { self.syncStatus = ... } inside @objc callbacks
+//   and inside processQueryResults — both are non-@MainActor contexts in Swift 6.
+//   Fix: mark the class @MainActor. NSMetadataQuery callbacks (@objc selectors)
+//   are automatically dispatched on the thread that started the query, which we
+//   explicitly start on the main queue. The nonisolated processQueryResults
+//   reads query data then hops to @MainActor for the state mutation.
 
+@MainActor
 final class iCloudMonitor: ObservableObject {
     static let shared = iCloudMonitor()
 
@@ -88,10 +97,10 @@ final class iCloudMonitor: ObservableObject {
             object: query
         )
 
-        DispatchQueue.main.async {
-            query.start()
-            self.syncStatus = .syncing
-        }
+        // Start query on main queue — this ensures @objc callbacks below
+        // are delivered on the main thread, which is @MainActor-compatible.
+        query.start()
+        syncStatus = .syncing
     }
 
     func stopMonitoring() {
@@ -102,6 +111,10 @@ final class iCloudMonitor: ObservableObject {
     }
 
     // MARK: - Query Callbacks
+    //
+    // These @objc selectors are called on the main thread (because the query
+    // was started on the main queue). Being on @MainActor, direct property
+    // mutation is safe — no DispatchQueue.main.async needed.
 
     @objc private func queryDidFinishGathering(_ notification: Notification) {
         processQueryResults()
@@ -111,6 +124,8 @@ final class iCloudMonitor: ObservableObject {
         processQueryResults()
     }
 
+    // Called on @MainActor (via the @objc selectors above).
+    // Reads NSMetadataQuery results synchronously then updates @Published state directly.
     private func processQueryResults() {
         guard let query = metadataQuery else { return }
         query.disableUpdates()
@@ -122,8 +137,6 @@ final class iCloudMonitor: ObservableObject {
         for i in 0..<query.resultCount {
             guard let item = query.result(at: i) as? NSMetadataItem else { continue }
 
-            // Use raw string literals — the Swift global constants for these
-            // iCloud status values are macOS-only and unavailable on iOS.
             let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             if status == iCloudDownloadStatus.downloading {
                 downloadingCount += 1
@@ -135,14 +148,13 @@ final class iCloudMonitor: ObservableObject {
             if hasConflict { conflictItems += 1 }
         }
 
-        DispatchQueue.main.async {
-            if conflictItems > 0 {
-                self.syncStatus = .conflict(conflictItems)
-            } else if downloadingCount > 0 {
-                self.syncStatus = .syncing
-            } else {
-                self.syncStatus = .synced(Date())
-            }
+        // Direct mutation — we are on @MainActor via the @objc callback chain
+        if conflictItems > 0 {
+            syncStatus = .conflict(conflictItems)
+        } else if downloadingCount > 0 {
+            syncStatus = .syncing
+        } else {
+            syncStatus = .synced(Date())
         }
     }
 }

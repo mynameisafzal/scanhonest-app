@@ -15,7 +15,7 @@ import SwiftUI
 private struct DragHandle: View {
     var body: some View {
         Capsule()
-            .fill(Color.black.opacity(0.18))
+            .fill(Color("Hairline"))   // was Color.black.opacity(0.18) — invisible in dark mode
             .frame(width: 36, height: 4)
     }
 }
@@ -84,7 +84,7 @@ struct ImportChoicePopup: View {
                         .font(.system(size: 15, weight: .medium))
                         .foregroundColor(Color.shMuted)
                         .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(Color.black.opacity(0.07))
+                        .background(Color("Surface"))   // was Color.black.opacity(0.07) — invisible in dark mode
                         .cornerRadius(25)
                 }
                 .buttonStyle(.plain)
@@ -117,7 +117,7 @@ private struct ImportOptionRow: View {
                 Text(emoji)
                     .font(.system(size: 20))
                     .frame(width: 44, height: 44)
-                    .background(Color.shAccentSoft)
+                    .background(Color.shPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -171,14 +171,7 @@ struct OCRProPopup: View {
 
                 // Icon + badge + headline
                 HStack(alignment: .top, spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.shAccentSoft)
-                            .frame(width: 56, height: 56)
-                        Image(systemName: "doc.text.viewfinder")
-                            .font(.system(size: 26, weight: .light))
-                            .foregroundColor(Color.shPrimary)
-                    }
+                    SHIconBadge(systemName: "doc.text.viewfinder", size: 56, iconSize: 26, cornerRadius: 16)
                     VStack(alignment: .leading, spacing: 6) {
                         Label("PRO FEATURE", systemImage: "star.fill")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))

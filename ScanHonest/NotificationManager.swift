@@ -25,11 +25,10 @@ struct NotificationManager {
         UserDefaults.standard.bool(forKey: Keys.notificationsEnabled)
     }
 
-    func checkAuthorization(completion: @escaping (Bool) -> Void) {
+    func checkAuthorization(completion: @escaping @MainActor (Bool) -> Void) {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                completion(settings.authorizationStatus == .authorized)
-            }
+            let granted = settings.authorizationStatus == .authorized
+            Task { @MainActor in completion(granted) }
         }
     }
 
@@ -75,10 +74,10 @@ struct NotificationManager {
 
     // MARK: - Request permission (called from PermissionsSlide or Settings toggle)
 
-    func requestAuthorization(completion: @escaping (Bool) -> Void) {
+    func requestAuthorization(completion: @escaping @MainActor (Bool) -> Void) {
         UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     UserDefaults.standard.set(granted, forKey: Keys.notificationsEnabled)
                     completion(granted)
                 }

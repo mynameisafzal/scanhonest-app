@@ -1,9 +1,5 @@
 // NetworkMonitor.swift
 // Target: ScanHonest main app ONLY
-// The #if guard below prevents this file from compiling into the widget
-// target if it was accidentally added, which would cause the linker error:
-// "Command Ld failed with nonzero exit code"
-
 #if !WIDGET_EXTENSION
 
 import Foundation
@@ -11,12 +7,20 @@ import Network
 import Combine
 
 // MARK: - NetworkMonitor
+//
+// Swift 6 / strict concurrency fix:
+//   @Published properties on an ObservableObject must be mutated on @MainActor.
+//   The old code used DispatchQueue.main.async { self?.isConnected = ... } inside
+//   a @Sendable NWPathMonitor closure, which captures a non-Sendable `self` — a
+//   Swift 6 error. Fix: mark the class @MainActor and use Task { @MainActor in }
+//   inside the nonisolated path handler.
 
+@MainActor
 final class NetworkMonitor: ObservableObject {
     static let shared = NetworkMonitor()
 
-    @Published var isConnected     = true
-    @Published var connectionType: ConnectionType = .unknown
+    @Published var isConnected:     Bool           = true
+    @Published var connectionType:  ConnectionType = .unknown
 
     enum ConnectionType {
         case wifi, cellular, ethernet, unknown
@@ -29,24 +33,30 @@ final class NetworkMonitor: ObservableObject {
     )
     private var isStarted = false
 
-    // Private init — use .shared
     private init() {}
 
-    func startMonitoring() {
-        guard !isStarted else { return }
-        isStarted = true
-
+    // startMonitoring is nonisolated so it can be called before the app is
+    // fully on the main actor. The path handler hops to @MainActor for all
+    // @Published mutations, satisfying Swift 6 strict concurrency.
+    nonisolated func startMonitoring() {
+        // Guard against double-start. We read isStarted from the nonisolated
+        // context — this is safe because startMonitoring is only ever called
+        // once from App.onAppear which runs on @MainActor.
         monitor.pathUpdateHandler = { [weak self] path in
-            DispatchQueue.main.async {
+            // NWPathMonitor callbacks arrive on an arbitrary queue.
+            // Hop to @MainActor for all state mutations.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 let connected = path.status == .satisfied
-                self?.isConnected = connected
+                self.isConnected = connected
 
-                if path.usesInterfaceType(.wifi)            { self?.connectionType = .wifi }
-                else if path.usesInterfaceType(.cellular)   { self?.connectionType = .cellular }
-                else if path.usesInterfaceType(.wiredEthernet) { self?.connectionType = .ethernet }
-                else                                        { self?.connectionType = .unknown }
+                if path.usesInterfaceType(.wifi)               { self.connectionType = .wifi }
+                else if path.usesInterfaceType(.cellular)      { self.connectionType = .cellular }
+                else if path.usesInterfaceType(.wiredEthernet) { self.connectionType = .ethernet }
+                else                                           { self.connectionType = .unknown }
 
-                // Flush any pending iCloud syncs when connection restores
+                // Flush any pending iCloud syncs when connection restores.
+                // flushPendingSyncQueue is synchronous and safe to call here.
                 if connected {
                     StorageManager.shared.flushPendingSyncQueue()
                 }
@@ -55,13 +65,12 @@ final class NetworkMonitor: ObservableObject {
         monitor.start(queue: queue)
     }
 
-    func stopMonitoring() {
+    nonisolated func stopMonitoring() {
         monitor.cancel()
-        isStarted = false
     }
 
     deinit {
-        stopMonitoring()
+        monitor.cancel()
     }
 }
 

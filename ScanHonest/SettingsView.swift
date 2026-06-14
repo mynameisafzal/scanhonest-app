@@ -44,9 +44,16 @@ struct SettingsView: View {
     @State private var toast: ToastMessage?         // success / error toasts
     @State private var isRestoring    = false
     @State private var isClearingCache = false
+    // FIX: local storage size loaded async so directory stat never blocks @MainActor
+    @State private var localStorageBytes: Int64 = 0
 
     private var isPro: Bool { storeKitManager.isPro }
     private var userPlan: UserPlan { isPro ? .pro : .free }
+    private var purchaseDate: Date? {
+        storeKitManager.purchaseDateRaw > 0
+            ? Date(timeIntervalSince1970: storeKitManager.purchaseDateRaw)
+            : nil
+    }
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -55,8 +62,8 @@ struct SettingsView: View {
     }
 
     private var formattedLocalStorage: String {
-        let bytes = StorageManager.shared.localStorageUsed()
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        // Uses async-loaded value from .task — never blocks main thread
+        ByteCountFormatter.string(fromByteCount: localStorageBytes, countStyle: .file)
     }
 
     private var iCloudStatus: String {
@@ -102,6 +109,11 @@ struct SettingsView: View {
         .onAppear {
             checkNotificationStatus()
             resolveBiometryType()
+        }
+        .task {
+            // Load storage size asynchronously so directory enumeration
+            // never stalls the main thread when Settings opens.
+            localStorageBytes = await StorageManager.shared.localStorageUsedAsync()
         }
         // Sheets & covers
         .fullScreenCover(isPresented: $showPaywall) {
@@ -184,58 +196,69 @@ struct SettingsView: View {
     }
 
     private var accountSection: some View {
-        SettingsSectionView(title: "Account") {
+        VStack(alignment: .leading, spacing: 0) {
             PromoCardView(
                 userPlan: userPlan,
                 remainingScans: scanLimitManager.scansRemaining,
                 lifetimePrice: storeKitManager.lifetimeProduct?.displayPrice ?? "$4.99",
                 onUpgrade: { showPaywall = true },
                 subscriptionStatus: storeKitManager.subscriptionStatus,
-                renewalDate: storeKitManager.subscriptionRenewalDate
+                renewalDate: storeKitManager.subscriptionRenewalDate,
+                purchaseDate: purchaseDate
             )
-            Divider()
-            if isPro {
-                SettingsRowView(
-                    icon: "creditcard",
-                    title: "Manage Subscription",
-                    accessory: .chevron,
-                    showsDivider: true
-                ) { openSubscriptions() }
-            }
-            // Restore — with loading state
-            Button {
-                Task { await handleRestorePurchases() }
-            } label: {
-                HStack(spacing: 12) {
-                    SettingsIconView(systemName: isRestoring ? "arrow.clockwise" : "arrow.clockwise")
-                    Text("Restore Purchase")
-                        .font(.system(size: 16))
-                        .foregroundColor(Color("TextPrimary"))
-                    Spacer(minLength: 12)
-                    if isRestoring {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .tint(Color("AccentGreen"))
-                    }
+            .padding(.top, 12)
+
+            SettingsSectionLabel(title: "Account")
+                .padding(.top, 18)
+
+            VStack(spacing: 0) {
+                if isPro {
+                    SettingsRowView(
+                        icon: "creditcard",
+                        title: "Manage Subscription",
+                        accessory: .chevron,
+                        showsDivider: true
+                    ) { openSubscriptions() }
                 }
-                .frame(minHeight: 44)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
+                // Restore — with loading state
+                Button {
+                    Task { await handleRestorePurchases() }
+                } label: {
+                    HStack(spacing: 12) {
+                        SettingsIconView(systemName: "arrow.clockwise")
+                        Text("Restore Purchase")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color("TextPrimary"))
+                        Spacer(minLength: 12)
+                        if isRestoring {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .tint(Color("AccentGreen"))
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                    .background(alignment: .bottom) { Divider() }
+                }
+                .buttonStyle(.plain)
+                .disabled(isRestoring)
+                .accessibilityIdentifier("restorePurchaseButton")
+                SettingsValueRowView(
+                    icon: "person.crop.circle.badge.checkmark",
+                    title: "iCloud Account",
+                    subtitle: "Used for document sync",
+                    value: iCloudStatus,
+                    valueColor: iCloudStatusColor,
+                    showsDivider: false
+                )
             }
-            .buttonStyle(.plain)
-            .disabled(isRestoring)
-            .accessibilityIdentifier("restorePurchaseButton")
-            SettingsValueRowView(
-                icon: "person.crop.circle.badge.checkmark",
-                title: "iCloud Account",
-                subtitle: "Used for document sync",
-                value: iCloudStatus,
-                valueColor: iCloudStatusColor,
-                showsDivider: false
-            )
+            .background(Color("Surface"))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color("Hairline"), lineWidth: 1))
         }
-        .padding(.top, 24)
+        .padding(.top, 0)
     }
 
     private var scanningSection: some View {
@@ -450,6 +473,7 @@ struct SettingsView: View {
         isClearingCache = true
         Task {
             await StorageManager.shared.deleteDocumentsOlderThanOneYear()
+            localStorageBytes = await StorageManager.shared.localStorageUsedAsync()
             await MainActor.run {
                 isClearingCache = false
                 showToast(.success("Space freed successfully"))
@@ -487,9 +511,10 @@ struct SettingsView: View {
 
     private func checkNotificationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                notificationsEnabled = settings.authorizationStatus == .authorized
-                    && UserDefaults.standard.bool(forKey: "notificationsEnabled")
+            let enabled = settings.authorizationStatus == .authorized
+                && UserDefaults.standard.bool(forKey: "notificationsEnabled")
+            Task { @MainActor [self] in
+                notificationsEnabled = enabled
             }
         }
     }
@@ -497,7 +522,7 @@ struct SettingsView: View {
     private func handleNotificationToggle(_ enable: Bool) {
         if enable {
             UNUserNotificationCenter.current().getNotificationSettings { settings in
-                DispatchQueue.main.async {
+                Task { @MainActor [self] in
                     switch settings.authorizationStatus {
                     case .notDetermined:
                         NotificationManager.shared.requestAuthorization { granted in
@@ -506,11 +531,10 @@ struct SettingsView: View {
                         }
                     case .denied:
                         notificationsEnabled = false
-                        showToast(.error("Enable notifications in iOS Settings → ScanHonest"))
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
-                            }
+                        showToast(.error("Enable notifications in iOS Settings \u{2192} ScanHonest"))
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
                         }
                     case .authorized, .provisional, .ephemeral:
                         UserDefaults.standard.set(true, forKey: "notificationsEnabled")
@@ -527,7 +551,8 @@ struct SettingsView: View {
 
     private func showToast(_ message: ToastMessage) {
         withAnimation { toast = message }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+        Task { @MainActor [self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             withAnimation { toast = nil }
         }
     }
@@ -786,10 +811,6 @@ private struct AboutLinkRow: View {
 }
 
 // MARK: - SettingsSectionView
-//
-// Design 8 spec: the section LABEL sits BELOW the card content, not above.
-// This matches the design where the Pro banner is the dominant element
-// and "ACCOUNT" appears as a caption underneath it.
 
 struct SettingsSectionView<Content: View>: View {
     let title: String
@@ -797,20 +818,26 @@ struct SettingsSectionView<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Content card first
+            SettingsSectionLabel(title: title)
+
             VStack(spacing: 0) { content }
                 .background(Color("Surface"))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color("Hairline"), lineWidth: 1))
-
-            // Section label BELOW the card
-            Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(Color("TextMuted"))
-                .tracking(0.8)
-                .padding(.horizontal, 6)
-                .padding(.top, 8)
         }
+    }
+}
+
+struct SettingsSectionLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundColor(Color("TextMuted"))
+            .tracking(0.8)
+            .padding(.horizontal, 6)
+            .padding(.bottom, 8)
     }
 }
 
@@ -824,6 +851,7 @@ struct PromoCardView: View {
     // Pass these in so PromoCardView knows subscription type + renewal date
     var subscriptionStatus: SubscriptionStatus = .none
     var renewalDate: Date? = nil
+    var purchaseDate: Date? = nil
     private var isPro: Bool { userPlan == .pro }
 
     private var planTitle: String {
@@ -837,18 +865,22 @@ struct PromoCardView: View {
     private var planSubtitle: String {
         switch subscriptionStatus {
         case .lifetime:
+            if let purchaseDate {
+                let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
+                return "Purchased \(f.string(from: purchaseDate)) \u{00B7} \(lifetimePrice)"
+            }
             return "Purchased \u{00B7} \(lifetimePrice)"
         case .active:
             if let date = renewalDate {
                 let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
-                return "Renews \(f.string(from: date))"
+                return "Renews \(f.string(from: date)) \u{00B7} \(lifetimePrice)"
             }
-            return "Renews monthly"
+            return "Renews monthly \u{00B7} \(lifetimePrice)"
         case .expiring(let date):
             let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
-            return "Cancels \(f.string(from: date))"
+            return "Cancels \(f.string(from: date)) \u{00B7} \(lifetimePrice)"
         default:
-            return "Active"
+            return "Purchased \u{00B7} \(lifetimePrice)"
         }
     }
 
@@ -856,42 +888,69 @@ struct PromoCardView: View {
         Group {
             if isPro {
                 ZStack(alignment: .topTrailing) {
-                    Circle().fill(Color("AccentSoft")).frame(width: 132, height: 132)
-                        .opacity(0.28).offset(x: 28, y: -34)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SCANHONEST PRO")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.82)).tracking(1.2)
+                    Circle()
+                        .fill(Color("AccentSoft"))
+                        .frame(width: 112, height: 112)
+                        .opacity(0.24)
+                        .offset(x: 30, y: -30)
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 7) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color("Gold"))
+                                    .frame(width: 14, height: 14)
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            Text("SCANHONEST PRO")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.72))
+                                .tracking(1.2)
+                        }
                         Text(planTitle)
-                            .font(.system(size: 22, weight: .bold)).foregroundColor(.white)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
                         Text(planSubtitle)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundColor(.white.opacity(0.82))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
                 }
-                .background(LinearGradient(
-                    colors: [Color("PrimaryGreen"), Color("SecondaryGreen")],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 100)
+                .background(Color("PrimaryGreen"))
             } else {
                 Button(action: onUpgrade) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Upgrade to Pro")
                                 .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(Color("AccentGreen"))
+                                .foregroundColor(Color("TextPrimary"))
                             Text("\(remainingScans) free scans remaining this month")
-                                .font(.system(size: 13)).foregroundColor(Color("TextMuted"))
+                                .font(.system(size: 13))
+                                .foregroundColor(Color("TextMuted"))
                         }
                         Spacer()
-                        Image(systemName: "chevron.right")
+                        Text("Upgrade")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(Color("TextMuted"))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Color("PrimaryGreen"))
+                            .clipShape(Capsule())
                     }
                     .padding(.horizontal, 16).padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .background(Color("Surface"))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color("Hairline"), lineWidth: 1))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -997,25 +1056,13 @@ struct SettingsValueRowView: View {
 
 // MARK: - SettingsIconView
 //
-// Renders a square icon badge: green-tinted rounded square background
-// with the SF Symbol centred in white. Matches the design spec for all
-// settings rows — currently was EmptyView() which made all icons invisible.
+// Thin wrapper around SHIconBadge for API compatibility.
+// All icon color logic lives in SHIconBadge in DesignSystem.swift.
 
 struct SettingsIconView: View {
     let systemName: String
-    var color: Color = Color("PrimaryGreen")
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(color.opacity(0.12))
-                .frame(width: 32, height: 32)
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(color)
-        }
-        .frame(width: 32, height: 32)
-    }
+    var color: Color = Color("PrimaryGreen")  // kept for API compat, ignored
+    var body: some View { SHIconBadge(systemName: systemName, size: 32, iconSize: 15) }
 }
 
 enum SettingsAccessory { case none, chevron }

@@ -150,7 +150,7 @@ struct NearbyShareView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "wifi")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color("PrimaryGreen"))
+                        .foregroundColor(Color("AccentGreen"))  // AccentGreen visible on AccentSoft in both modes
                     Text("Share securely with nearby ScanHonest users.")
                         .font(.system(size: 13))
                         .foregroundColor(Color("TextMuted"))
@@ -292,12 +292,8 @@ private struct ScanningForPeersView: View {
                             value: pulse
                         )
                 }
-                ZStack {
-                    Circle().fill(Color("AccentSoft")).frame(width: 64, height: 64)
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundColor(Color("PrimaryGreen"))
-                }
+                SHIconBadge(systemName: "antenna.radiowaves.left.and.right",
+                            size: 64, iconSize: 28, cornerRadius: 32)
             }
             .frame(width: 120, height: 120)
 
@@ -329,7 +325,7 @@ struct NearbyPeerRow: View {
                 // Device avatar
                 ZStack {
                     Circle()
-                        .fill(isTarget ? Color("PrimaryGreen") : Color("AccentSoft"))
+                        .fill(isTarget ? Color("PrimaryGreen") : Color("PrimaryGreen").opacity(0.15))
                         .frame(width: 44, height: 44)
                     Image(systemName: deviceIcon)
                         .font(.system(size: 20, weight: .light))
@@ -635,12 +631,7 @@ struct IncomingTransferPrompt: View {
 
                         VStack(spacing: 20) {
                             // Sender device icon
-                            ZStack {
-                                Circle().fill(Color("AccentSoft")).frame(width: 72, height: 72)
-                                Image(systemName: "iphone")
-                                    .font(.system(size: 32, weight: .light))
-                                    .foregroundColor(Color("PrimaryGreen"))
-                            }
+                            SHIconBadge(systemName: "iphone", size: 72, iconSize: 32, cornerRadius: 36)
                             .padding(.top, 8)
 
                             VStack(spacing: 6) {
@@ -705,7 +696,7 @@ struct IncomingTransferPrompt: View {
                     }
                     .background(Color("Background"))
                     .cornerRadius(24, corners: [.topLeft, .topRight])
-                    .shadow(color: .black.opacity(0.12), radius: 24, y: -8)
+                    .shadow(color: Color("TextMuted").opacity(0.15), radius: 24, y: -8)  // was black.opacity(0.12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
                     // Receiving in progress

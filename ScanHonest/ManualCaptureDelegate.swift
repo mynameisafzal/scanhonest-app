@@ -293,8 +293,10 @@ final class ManualCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     // MARK: - Delivery
 
     private func deliver(_ result: Result<UIImage, CaptureError>) {
-        DispatchQueue.main.async { [weak self] in
-            self?.completion(result)
-        }
+        // Use Task { @MainActor in } instead of DispatchQueue.main.async.
+        // DispatchQueue closures are @Sendable and cannot capture the
+        // non-Sendable completion handler in strict concurrency mode.
+        let completion = self.completion
+        Task { @MainActor in completion(result) }
     }
 }

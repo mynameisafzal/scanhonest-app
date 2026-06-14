@@ -122,15 +122,18 @@ final class LockService: ObservableObject {
             return
         }
 
-        context.evaluatePolicy(policy, localizedReason: "Unlock ScanHonest") { [weak self] success, authError in
-            DispatchQueue.main.async {
+        // LAContext.evaluatePolicy completion runs on an arbitrary thread.
+        // Swift 6: capturing @MainActor-isolated self as non-Sendable inside
+        // a @Sendable DispatchQueue closure is a strict-concurrency violation.
+        // Fix: Task { @MainActor in } is the correct hop from any Sendable context.
+        context.evaluatePolicy(policy, localizedReason: "Unlock ScanHonest") { success, authError in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isAuthenticating = false
                 if success {
                     self.isLocked = false
                     self.logger.info("Authentication succeeded — app unlocked.")
                 } else {
-                    // Keep locked; user can tap "Unlock" again
                     self.logger.warning("Authentication failed: \(authError?.localizedDescription ?? "unknown")")
                 }
             }
@@ -207,9 +210,11 @@ struct LockScreenView: View {
             }
         }
         .onAppear {
-            // Auto-prompt on appearance so the user doesn't have to tap manually
-            // on the first lock after returning from background
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Delay auto-prompt slightly so the lock overlay is fully rendered.
+            // Task.sleep is the Swift-concurrency-safe replacement for
+            // DispatchQueue.main.asyncAfter when already on @MainActor.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
                 lockService.authenticate()
             }
         }

@@ -1,0 +1,5 @@
+// CloudExportEngine.swift — DELETED
+//
+// Google Drive and Dropbox export functionality has been removed.
+// iCloud document sync is handled exclusively by StorageManager + iCloudMonitor.
+// This file is intentionally empty. It can be removed from the Xcode project navigator.

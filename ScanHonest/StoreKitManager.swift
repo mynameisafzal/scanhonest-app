@@ -152,21 +152,37 @@ class StoreKitManager: ObservableObject {
         // during that window triggers the "Product not available" error.
         isLoading = true
 
-        // Single transaction listener — handles:
-        // • Subscription auto-renewals
-        // • Refunds / revocations
-        // • Family-sharing purchases
-        // • Ask-to-Buy approvals
+        // Transaction listener: handles renewals, revocations, family-sharing, Ask-to-Buy.
+        //
+        // Swift 6 strict-concurrency fix:
+        //   The old code used Task.detached { [weak self] in ... self.checkVerified(...) }
+        //   which captures a non-Sendable @MainActor class into a @Sendable closure.
+        //   Fix:
+        //     1. checkVerified is already `nonisolated` — call it as a free function.
+        //     2. All @MainActor state mutations go through `await MainActor.run { }`.
+        //     3. No [weak self] capture needed — we call updateSubscriptionStatus
+        //        via MainActor.run which safely hops to the actor.
         transactionListener = Task.detached(priority: .background) { [weak self] in
-            for await result in Transaction.updates {
-                guard let self else { break }
+            for await result in StoreKit.Transaction.updates {
                 do {
-                    // Verify on background, hop to MainActor for state update
-                    let tx = try self.checkVerified(result)
-                    await self.updateSubscriptionStatus()
+                    let tx: StoreKit.Transaction
+                    switch result {
+                    case .verified(let t):      tx = t
+                    case .unverified(_, let e): throw StoreKitError.verification(e)
+                    }
+                    // Hop to @MainActor to call instance methods.
+                    // [weak self] is safe here — Task.detached is nonisolated
+                    // and self is only accessed inside MainActor.run.
+                    await MainActor.run { [weak self] in
+                        self?.objectWillChange.send()
+                    }
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        Task { await self.updateSubscriptionStatus() }
+                    }
                     await tx.finish()
                 } catch {
-                    // Never grant access on unverified transactions — silently ignore
+                    // Never grant access on unverified transactions
                 }
             }
         }
@@ -344,7 +360,7 @@ class StoreKitManager: ObservableObject {
         var foundRenewalDate: Date?              = nil
         var entitlementIDs:   [String]           = []
 
-        for await result in Transaction.currentEntitlements {
+        for await result in StoreKit.Transaction.currentEntitlements {
             do {
                 let tx = try checkVerified(result)
                 entitlementIDs.append(tx.productID)

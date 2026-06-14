@@ -41,7 +41,7 @@ enum EncryptionError: LocalizedError {
 //   • The .tmp file is written with .completeFileProtectionUntilFirstUserAuthentication
 //     so the OS data-protection layer covers the window between tmpWrite and atomicMove.
 
-final class DocumentEncryptionManager {
+final class DocumentEncryptionManager: @unchecked Sendable {
 
     static let shared = DocumentEncryptionManager()
 
@@ -230,7 +230,9 @@ final class DocumentEncryptionManager {
         logger.info("Key rotation complete — \(files.count) files re-encrypted.")
     }
 
-    private func updateCachedKey(_ key: SymmetricKey) {
+    // nonisolated: only touches the lock-protected _cachedKey — no actor state.
+    // Prevents Swift 6 warning about calling a sync NSLock inside async rotateKey.
+    nonisolated private func updateCachedKey(_ key: SymmetricKey) {
         cacheLock.withLock {
             _cachedKey = key
         }

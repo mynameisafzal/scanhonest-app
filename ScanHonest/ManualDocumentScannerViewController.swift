@@ -358,8 +358,9 @@ final class ManualDocumentScannerViewController: UIViewController {
             // Manual mode: short 0.3 s pause so the freeze-frame is visible.
             // Auto-capture mode: longer 1.5 s pause so the user can see the
             // captured result before the scanner re-arms for the next page.
-            let resumeDelay: TimeInterval = isAutoCapture ? 1.5 : 0.30
-            DispatchQueue.main.asyncAfter(deadline: .now() + resumeDelay) { [weak self] in
+            let resumeDelay: UInt64 = isAutoCapture ? 1_500_000_000 : 300_000_000
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: resumeDelay)
                 self?.scannerState = .scanning
             }
         }
@@ -448,8 +449,24 @@ final class ManualDocumentScannerViewController: UIViewController {
 
             if let result = smoothingFilter.process(sorted, referenceWidth: screenW) {
                 let layerPts = result.corners.map(visionPointToLayer)
-                docOverlay.update(corners: layerPts,
-                                  isStable: result.isStable || smoothingFilter.isStable)
+                // Extract curved edge points from VNDocumentObservation (iOS 16+)
+                // so the green overlay follows the actual paper boundary including
+                // page curl and staple distortion.
+                let edgePts  = extractEdgePoints(from: obs, corners: result.corners)
+                let layerEdge = edgePts.map { ep -> DocumentEdgePoints in
+                    DocumentEdgePoints(
+                        top:    ep.top.map(visionPointToLayer),
+                        right:  ep.right.map(visionPointToLayer),
+                        bottom: ep.bottom.map(visionPointToLayer),
+                        left:   ep.left.map(visionPointToLayer)
+                    )
+                }
+                isCurvedDetection = layerEdge?.hasCurvature == true
+                docOverlay.update(
+                    corners:    layerPts,
+                    edgePoints: layerEdge,
+                    isStable:   result.isStable || smoothingFilter.isStable
+                )
             } else if smoothingFilter.isStable,
                       let last = smoothingFilter.currentSmoothed {
                 let layerPts = last.map(visionPointToLayer)
@@ -457,16 +474,10 @@ final class ManualDocumentScannerViewController: UIViewController {
             }
 
             // Auto-capture
-            // Auto-capture confidence bar is intentionally higher than the Vision
-            // request's minimumConfidence (0.55). 0.85+ means Vision sees all four
-            // document edges cleanly — a wall or table rarely scores this high.
             if isAutoCapture && scannerState == .scanning && obs.confidence >= 0.85 {
                 consecutiveDetectionCount += 1
                 if consecutiveDetectionCount >= kAutoCaptureTriggerCount {
                     consecutiveDetectionCount = 0
-                    // Hard cooldown: never fire again until kAutoCaptureMinInterval
-                    // seconds have passed, even if the state machine has reset.
-                    // This is the primary guard against rapid-fire captures.
                     let now = Date()
                     if now.timeIntervalSince(lastAutoCaptureDate) >= kAutoCaptureMinInterval {
                         lastAutoCaptureDate = now
@@ -486,7 +497,106 @@ final class ManualDocumentScannerViewController: UIViewController {
             }
         }
 
-        updateHint(documentDetected: obs != nil || noDetectionTickCount < kNoDetectionGraceTicks)
+        updateHint(
+            documentDetected: obs != nil || noDetectionTickCount < kNoDetectionGraceTicks,
+            isCurved: isCurvedDetection
+        )
+    }
+
+    // Tracks whether the last detection had meaningful curvature
+    private var isCurvedDetection = false
+
+    // MARK: - Curved contour extraction
+    //
+    // On iOS 16+ VNDetectDocumentSegmentationRequest returns a VNDocumentObservation
+    // whose normalizedPath contains the full document boundary as a CGPath.
+    // We sample that path to get intermediate points along each edge, which
+    // DocumentOverlayView uses to draw a bezier spline that follows the actual
+    // paper boundary — including page curl, staple bulge, and fold distortions.
+    //
+    // On iOS <16 we return nil (straight-line overlay used as fallback).
+
+    private func extractEdgePoints(from obs: VNRectangleObservation,
+                                    corners: [CGPoint]) -> DocumentEdgePoints? {
+        // iOS 17 baseline: VNDetectDocumentSegmentationRequest always available.
+        // VNDocumentObservation is not publicly exposed as a Swift type name,
+        // so we access normalizedPath via ObjC runtime inspection.
+
+        let nsObs = obs as AnyObject
+        guard nsObs.responds(to: NSSelectorFromString("normalizedPath")) else {
+            return nil
+        }
+        guard let path = nsObs.value(forKey: "normalizedPath") as! CGPath? else {
+            return nil
+        }
+
+        // Collect all contour points by walking the CGPath elements
+        var allPoints: [CGPoint] = []
+        path.applyWithBlock { element in
+            switch element.pointee.type {
+            case .moveToPoint:
+                allPoints.append(element.pointee.points[0])
+            case .addLineToPoint:
+                allPoints.append(element.pointee.points[0])
+            case .addQuadCurveToPoint:
+                let cp = element.pointee.points[0]
+                let ep = element.pointee.points[1]
+                if let last = allPoints.last {
+                    for t in stride(from: 0.25, through: 1.0, by: 0.25) {
+                        let mt = 1.0 - CGFloat(t)
+                        let x = mt*mt*last.x + 2*mt*CGFloat(t)*cp.x + CGFloat(t)*CGFloat(t)*ep.x
+                        let y = mt*mt*last.y + 2*mt*CGFloat(t)*cp.y + CGFloat(t)*CGFloat(t)*ep.y
+                        allPoints.append(CGPoint(x: x, y: y))
+                    }
+                }
+            case .addCurveToPoint:
+                let cp1 = element.pointee.points[0]
+                let cp2 = element.pointee.points[1]
+                let ep  = element.pointee.points[2]
+                if let last = allPoints.last {
+                    for t in stride(from: 1.0/6.0, through: 1.0, by: 1.0/6.0) {
+                        let mt = 1.0 - CGFloat(t)
+                        let x = mt*mt*mt*last.x + 3*mt*mt*CGFloat(t)*cp1.x + 3*mt*CGFloat(t)*CGFloat(t)*cp2.x + CGFloat(t)*CGFloat(t)*CGFloat(t)*ep.x
+                        let y = mt*mt*mt*last.y + 3*mt*mt*CGFloat(t)*cp1.y + 3*mt*CGFloat(t)*CGFloat(t)*cp2.y + CGFloat(t)*CGFloat(t)*CGFloat(t)*ep.y
+                        allPoints.append(CGPoint(x: x, y: y))
+                    }
+                }
+            case .closeSubpath: break
+            @unknown default:  break
+            }
+        }
+
+        guard allPoints.count >= 4 else { return nil }
+
+        let tl = corners[0], tr = corners[1], br = corners[2], bl = corners[3]
+
+        func closestIndex(_ target: CGPoint) -> Int {
+            allPoints.indices.min(by: {
+                hypot(allPoints[$0].x - target.x, allPoints[$0].y - target.y) <
+                hypot(allPoints[$1].x - target.x, allPoints[$1].y - target.y)
+            }) ?? 0
+        }
+
+        let iTL = closestIndex(tl)
+        let iTR = closestIndex(tr)
+        let iBR = closestIndex(br)
+        let iBL = closestIndex(bl)
+
+        func slice(from: Int, to: Int) -> [CGPoint] {
+            let n = allPoints.count
+            if from == to { return [] }
+            var pts: [CGPoint] = []
+            var i = from
+            while i != to { pts.append(allPoints[i]); i = (i + 1) % n }
+            return pts.count > 2 ? Array(pts.dropFirst().dropLast()) : []
+        }
+
+        return DocumentEdgePoints(
+            top:    slice(from: iTL, to: iTR),
+            right:  slice(from: iTR, to: iBR),
+            bottom: slice(from: iBR, to: iBL),
+            left:   slice(from: iBL, to: iTL)
+        )
     }
 
     // MARK: - Vision → layer coordinate mapping
@@ -553,11 +663,16 @@ final class ManualDocumentScannerViewController: UIViewController {
 
     // MARK: - Hint label
 
-    private func updateHint(documentDetected: Bool) {
-        // Identical text and style regardless of isAutoCapture — both modes look the same.
-        // Auto-capture's only visual difference from manual is that the shutter fires
-        // itself; the scanner UI is unchanged.
-        hintLabel.text = documentDetected ? "\u{2713}  Document detected" : "Position document in frame"
+    private func updateHint(documentDetected: Bool, isCurved: Bool = false) {
+        let text: String
+        if !documentDetected {
+            text = "Position document in frame"
+        } else if isCurved {
+            text = "\u{21BA}  Curved page \u{2014} tap to capture"
+        } else {
+            text = "\u{2713}  Document detected"
+        }
+        hintLabel.text = text
         UIView.animate(withDuration: 0.15) {
             if documentDetected {
                 self.hintLabel.backgroundColor = UIColor(red: 0.455, green: 0.776, blue: 0.616, alpha: 0.95)
@@ -611,13 +726,9 @@ final class ManualDocumentScannerViewController: UIViewController {
 
             if self.session.canAddOutput(self.photoOutput) {
                 self.session.addOutput(self.photoOutput)
-                // iOS 16+: configure max photo dimensions once at session setup
-                // (replaces the per-capture isHighResolutionPhotoEnabled flag).
-                if #available(iOS 16.0, *) {
-                    if let maxDims = device.activeFormat
-                                          .supportedMaxPhotoDimensions.last {
-                        self.photoOutput.maxPhotoDimensions = maxDims
-                    }
+                // iOS 17 baseline: maxPhotoDimensions is always available
+                if let maxDims = device.activeFormat.supportedMaxPhotoDimensions.last {
+                    self.photoOutput.maxPhotoDimensions = maxDims
                 }
             }
 
@@ -666,14 +777,8 @@ final class ManualDocumentScannerViewController: UIViewController {
         // background pass rather than blocking the capture pipeline.
         settings.photoQualityPrioritization = .speed
 
-        // Full sensor resolution — critical for accurate quad mapping.
-        // iOS 16+: maxPhotoDimensions replaces the deprecated isHighResolutionPhotoEnabled.
-        // The output's maxPhotoDimensions was set to the device maximum in setupSession().
-        if #available(iOS 16.0, *) {
-            settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
-        } else {
-            settings.isHighResolutionPhotoEnabled = true
-        }
+        // iOS 17 baseline: maxPhotoDimensions always available
+        settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
 
         // Flash: user-controlled toggle.  When off (default) we skip the pre-flash
         // entirely — the ~100 ms strobe occurs during the shutter-lag window and
@@ -687,11 +792,8 @@ final class ManualDocumentScannerViewController: UIViewController {
 
     private func orientPreviewConnection() {
         guard let conn = previewLayer.connection else { return }
-        if #available(iOS 17.0, *) {
-            if conn.isVideoRotationAngleSupported(90) { conn.videoRotationAngle = 90 }
-        } else {
-            if conn.isVideoOrientationSupported { conn.videoOrientation = .portrait }
-        }
+        // iOS 17 baseline: videoRotationAngle always available
+        if conn.isVideoRotationAngleSupported(90) { conn.videoRotationAngle = 90 }
     }
 
     // MARK: - Outline layer
@@ -943,10 +1045,13 @@ extension ManualDocumentScannerViewController {
 
         if let pb = latestPixelBuffer {
             let thumbTarget = CGSize(width: thumbSize * 2, height: thumbSize * 3)
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Task.detached for thumbnail generation — off main thread.
+            // Capture only Sendable values (CGSize, Int) to avoid
+            // non-Sendable ManualDocumentScannerViewController capture.
+            Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self else { return }
                 let placeholder = self.makeThumbnailImage(from: pb, targetSize: thumbTarget)
-                DispatchQueue.main.async { [weak self] in
+                await MainActor.run { [weak self] in
                     self?.insertThumbnail(image: placeholder, atIndex: pendingIndex)
                 }
             }
@@ -1155,22 +1260,10 @@ extension ManualDocumentScannerViewController: AVCaptureVideoDataOutputSampleBuf
         // frozen geometry and cause the bounding box to jitter.
         guard isVisionEnabled else { return }
 
-        // ── Detection strategy ────────────────────────────────────────────────
-        //
-        // iOS 16+: VNDetectDocumentSegmentationRequest
-        //   Neural-network model trained specifically on documents.  It handles
-        //   low-contrast scenarios (white paper on white desk), cluttered
-        //   backgrounds, and partial occlusion far better than a geometric
-        //   rectangle detector.  This is the same model Apple's built-in
-        //   VNDocumentCameraViewController uses internally.
-        //   VNDocumentObservation is a subclass of VNRectangleObservation so
-        //   the rest of the pipeline (sorting, smoothing, overlay) is unchanged.
-        //
-        // iOS <16 fallback: VNDetectRectanglesRequest
-        //   Geometric quadrilateral detector. Works on any iOS version but
-        //   requires explicit aspect-ratio / confidence thresholds to reduce
-        //   false positives on non-document rectangles.
-
+        // iOS 17 baseline: VNDetectDocumentSegmentationRequest always available.
+        // Neural-network model trained on documents — handles low-contrast,
+        // cluttered backgrounds, curved/stapled pages better than the
+        // geometric VNDetectRectanglesRequest fallback.
         let request: VNRequest
         let bufferHandler = { [weak self] (req: VNRequest, _: Error?) in
             guard let self else { return }
@@ -1181,18 +1274,8 @@ extension ManualDocumentScannerViewController: AVCaptureVideoDataOutputSampleBuf
             self.pendingObsLock.unlock()
         }
 
-        if #available(iOS 16.0, *) {
-            let docReq = VNDetectDocumentSegmentationRequest(completionHandler: bufferHandler)
-            request = docReq
-        } else {
-            let rectReq = VNDetectRectanglesRequest(completionHandler: bufferHandler)
-            rectReq.minimumConfidence   = 0.55
-            rectReq.minimumAspectRatio  = 0.40
-            rectReq.maximumAspectRatio  = 1.00
-            rectReq.minimumSize         = 0.20
-            rectReq.maximumObservations = 1
-            request = rectReq
-        }
+        let docReq = VNDetectDocumentSegmentationRequest(completionHandler: bufferHandler)
+        request = docReq
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer,
                                             orientation: .right,
@@ -1226,8 +1309,12 @@ struct ManualDocumentScannerView: UIViewControllerRepresentable {
         let vc = ManualDocumentScannerViewController()
         vc.isAutoCapture = isAutoCapture
         vc.captureFilter = captureFilter
-        vc.onFinish = { images in DispatchQueue.main.async { onScan(images) } }
-        vc.onCancel = { DispatchQueue.main.async { isPresented = false } }
+        vc.onFinish = { images in
+            Task { @MainActor in onScan(images) }
+        }
+        vc.onCancel = {
+            Task { @MainActor in isPresented = false }
+        }
         return vc
     }
 

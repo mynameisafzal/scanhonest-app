@@ -20,7 +20,7 @@ import os.log
 // Keys mirror the private `SharedKey` enum in ScanHonestWidget.swift.
 // If you rename a key here, rename it there too.
 
-final class WidgetDataWriter {
+final class WidgetDataWriter: @unchecked Sendable {
 
     static let shared = WidgetDataWriter()
     private let logger = Logger(subsystem: "com.afzal.ScanHonest", category: "WidgetData")

@@ -7,7 +7,6 @@
 #if !WIDGET_EXTENSION
 
 import Foundation
-import UIKit
 
 // MARK: - PaywallVariant
 
@@ -26,14 +25,47 @@ enum PaywallVariant: String, CaseIterable {
 }
 
 // MARK: - PaywallABTesting
+//
+// Swift 6 concurrency note:
+//   UIDevice.current and identifierForVendor are @MainActor-isolated.
+//   We cannot call them from a nonisolated context (init of a static let,
+//   or any method on a non-@MainActor class).
+//
+// Permanent fix:
+//   The vendor ID is seeded ONCE into UserDefaults by seedVendorIDIfNeeded(),
+//   which is called explicitly from @MainActor context (ScanHonestApp.body)
+//   before the first paywall is ever presented.
+//   All subsequent reads use UserDefaults.standard — which is thread-safe and
+//   has no actor isolation — so currentVariant is safely nonisolated.
 
-final class PaywallABTesting {
+final class PaywallABTesting: @unchecked Sendable {
+
     static let shared = PaywallABTesting()
     private init() {}
 
-    /// Deterministic — same device always gets same variant
+    // UserDefaults key for the cached vendor ID string.
+    // File-scope constant — no actor isolation, accessible from anywhere.
+    private static let vendorIDKey = "paywallABTesting.vendorID"
+
+    // MARK: - Seed (call once from @MainActor before first paywall)
+
+    /// Must be called once from a @MainActor context (e.g. ScanHonestApp.body .onAppear)
+    /// before currentVariant is accessed. Reads UIDevice.current.identifierForVendor
+    /// and stores it in UserDefaults so all subsequent reads are nonisolated.
+    @MainActor
+    static func seedVendorIDIfNeeded() {
+        guard UserDefaults.standard.string(forKey: vendorIDKey) == nil else { return }
+        // UIDevice.current is @MainActor — safe to access here.
+        let id = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        UserDefaults.standard.set(id, forKey: vendorIDKey)
+    }
+
+    // MARK: - Variant (nonisolated — reads only UserDefaults)
+
+    /// Deterministic — same device always gets same variant.
+    /// UserDefaults.standard is thread-safe; no actor annotation needed.
     var currentVariant: PaywallVariant {
-        let id   = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let id   = UserDefaults.standard.string(forKey: Self.vendorIDKey) ?? UUID().uuidString
         let hash = abs(id.hashValue) % PaywallVariant.allCases.count
         return PaywallVariant.allCases[hash]
     }

@@ -28,7 +28,6 @@ struct PaywallView: View {
         case folders     = "folders"
         case widget      = "widget"
         case protect     = "protect"
-        case cloudExport = "cloud_export"
         case aiNaming    = "ai_naming"
         case general     = "general"
     }
@@ -337,7 +336,6 @@ struct PaywallView: View {
         case .folders:     return "folder"
         case .widget:      return "square.grid.2x2"
         case .protect:     return "lock.shield"
-        case .cloudExport: return "arrow.up.circle"
         case .aiNaming:    return "wand.and.stars"
         case .general:     return "star"
         }
@@ -351,7 +349,6 @@ struct PaywallView: View {
         case .folders:     return "FOLDERS REQUIRE PRO"
         case .widget:      return "WIDGET REQUIRES PRO"
         case .protect:     return "PROTECTION REQUIRES PRO"
-        case .cloudExport: return "CLOUD EXPORT REQUIRES PRO"
         case .aiNaming:    return "AI NAMING REQUIRES PRO"
         case .general:     return "UPGRADE TO PRO"
         }
@@ -471,9 +468,12 @@ struct PaywallHeaderView: View {
                     .font(.system(size: 11, weight: .medium))
                     .tracking(0.5).textCase(.uppercase)
             }
-            .foregroundColor(Color("PrimaryGreen"))
+            // FIX B3: was PrimaryGreen text on AccentSoft bg
+            // In dark mode both are near-identical dark greens = invisible
+            // White text on PrimaryGreen bg = always readable
+            .foregroundColor(.white)
             .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(Color("AccentSoft")).clipShape(Capsule())
+            .background(Color("PrimaryGreen")).clipShape(Capsule())
 
             Text("Upgrade to Pro")
                 .font(.system(size: 30, weight: .bold)).foregroundColor(Color("TextPrimary"))

@@ -40,7 +40,7 @@ import os.log
 // would have blocked if permission was being requested for the first time.
 
 @MainActor
-final class NearbyPermissionManager {
+final class NearbyPermissionManager: @unchecked Sendable {
 
     static let shared = NearbyPermissionManager()
     private init() {}

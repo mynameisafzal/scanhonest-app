@@ -44,7 +44,7 @@ struct ScanHonestApp: App {
         _nearbyShare      = StateObject(wrappedValue: ns)
         _lockService      = StateObject(wrappedValue: ls)
 
-        let schema = Schema([ScannedDocument.self, DocumentFolder.self])
+        let schema = Schema([ScannedDocument.self, DocumentFolder.self, ScanTemplate.self, AuditEvent.self])
 
         // Try iCloud-backed store first. If that fails (container not yet
         // registered in ASC, device not signed into iCloud, or schema change)
@@ -71,7 +71,7 @@ struct ScanHonestApp: App {
 
     /// Attempts to create a ModelContainer with or without CloudKit.
     /// Returns nil on any failure — never throws, never crashes.
-    private static func makeContainer(schema: Schema, iCloud: Bool) -> ModelContainer? {
+    nonisolated private static func makeContainer(schema: Schema, iCloud: Bool) -> ModelContainer? {
         do {
             let config = ModelConfiguration(
                 schema: schema,
@@ -114,6 +114,9 @@ struct ScanHonestApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--seedTestDocument") {
                         ScanHonestApp.seedTestDocument(into: sharedModelContainer)
                     }
+                    // Seed A/B testing vendor ID from @MainActor before any paywall
+                    // is shown — UIDevice.current requires @MainActor context.
+                    PaywallABTesting.seedVendorIDIfNeeded()
                     NetworkMonitor.shared.startMonitoring()
                     iCloudMonitor.shared.startMonitoring()
                     // DO NOT call nearbyShare.startAdvertising() here.
@@ -160,10 +163,6 @@ struct ScanHonestApp: App {
     static func seedTestDocument(into container: ModelContainer) {
         let ctx = container.mainContext
 
-        // Always wipe stale documents from previous test runs.
-        // Only UserDefaults is cleared by --uitesting; the SwiftData SQLite store
-        // persists across runs. Stale records may point to missing or wrong files,
-        // causing prepareURLs to throw fileMissing → share sheet never dismisses.
         let existing = (try? ctx.fetch(FetchDescriptor<ScannedDocument>())) ?? []
         for doc in existing { ctx.delete(doc) }
 

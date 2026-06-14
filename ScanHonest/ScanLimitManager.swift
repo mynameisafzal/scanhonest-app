@@ -1,18 +1,32 @@
 import SwiftUI
 import Combine
 
+// MARK: - UserDefaults keys (file-scope)
+//
+// PERMANENT FIX for "Main actor-isolated static property can not be referenced
+// from a nonisolated context":
+//
+// In Swift 6, ALL members of a @MainActor class — including `static let` —
+// inherit @MainActor isolation. There is no way to opt a static property out
+// of actor isolation while it lives inside a @MainActor class declaration.
+//
+// The only guaranteed-permanent solution is to move the keys to FILE SCOPE.
+// File-scope constants have no actor isolation by definition. They are safe
+// to access from @MainActor, nonisolated, Task.detached, or any other context.
+// This will never produce an actor-isolation error regardless of Swift version.
+
+private let scanLimitScansKey   = "scansUsedThisMonth"
+private let scanLimitResetKey   = "scanCountResetDate"
+private let scanLimitInstallKey = "appFirstInstallDate"
+
+// MARK: - ScanLimitManager
+
 @MainActor
 class ScanLimitManager: ObservableObject {
 
     static let freeMonthlyLimit = 5
 
     @Published private(set) var scansUsedThisMonth: Int = 0
-
-    private let defaults  = UserDefaults.standard
-    private let scansKey  = "scansUsedThisMonth"
-    private let resetKey  = "scanCountResetDate"
-    // FIX: track first-install date so reset cycle is 30 days from install, not calendar month
-    private let installKey = "appFirstInstallDate"
 
     // MARK: - Derived state
 
@@ -29,7 +43,6 @@ class ScanLimitManager: ObservableObject {
         return Color("AccentGreen")
     }
 
-    /// Dynamic reset date — 30 days from current cycle start, not a fixed calendar date
     var nextResetFormatted: String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -37,25 +50,13 @@ class ScanLimitManager: ObservableObject {
     }
 
     var nextResetDate: Date {
-        // Find the start of the current 30-day cycle from first install
-        let install = installDate
+        let install = ScanLimitManager.readInstallDate()
         let now     = Date()
         let elapsed = now.timeIntervalSince(install)
-        let period: TimeInterval = 30 * 24 * 3600   // 30 days in seconds
-        // How many full periods have elapsed since install?
+        let period: TimeInterval = 30 * 24 * 3600
         let cyclesPassed = floor(elapsed / period)
-        // Start of the CURRENT period
-        let cycleStart = install.addingTimeInterval(cyclesPassed * period)
-        // Next reset = start of NEXT period
+        let cycleStart   = install.addingTimeInterval(cyclesPassed * period)
         return cycleStart.addingTimeInterval(period)
-    }
-
-    private var installDate: Date {
-        if let saved = defaults.object(forKey: installKey) as? Date { return saved }
-        // First launch — record now as install date
-        let now = Date()
-        defaults.set(now, forKey: installKey)
-        return now
     }
 
     func counterState(isPro: Bool) -> ScanCounterState {
@@ -65,17 +66,18 @@ class ScanLimitManager: ObservableObject {
     // MARK: - Init
 
     init() {
-        checkAndResetIfNeeded()
-        scansUsedThisMonth = defaults.integer(forKey: scansKey)
+        ScanLimitManager.checkAndResetIfNeeded()
+        scansUsedThisMonth = UserDefaults.standard.integer(forKey: scanLimitScansKey)
     }
 
     // MARK: - Mutations
 
     func recordScan() {
-        checkAndResetIfNeeded()
+        ScanLimitManager.checkAndResetIfNeeded()
+        scansUsedThisMonth = UserDefaults.standard.integer(forKey: scanLimitScansKey)
         guard !hasReachedLimit else { return }
         scansUsedThisMonth += 1
-        defaults.set(scansUsedThisMonth, forKey: scansKey)
+        UserDefaults.standard.set(scansUsedThisMonth, forKey: scanLimitScansKey)
         if scansUsedThisMonth == ScanLimitManager.freeMonthlyLimit - 1 {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
@@ -83,36 +85,42 @@ class ScanLimitManager: ObservableObject {
 
     func resetCount() {
         scansUsedThisMonth = 0
-        defaults.set(0, forKey: scansKey)
-        // Also reset the cycle — next reset will be 30 days from now
-        defaults.set(Date(), forKey: installKey)
-        defaults.removeObject(forKey: resetKey)
+        UserDefaults.standard.set(0,        forKey: scanLimitScansKey)
+        UserDefaults.standard.set(Date(),   forKey: scanLimitInstallKey)
+        UserDefaults.standard.removeObject(forKey: scanLimitResetKey)
     }
 
-    // MARK: - FIX: 30-day cycle reset (dynamic, tied to install date)
+    // MARK: - nonisolated static helpers
+    //
+    // Static methods on a @MainActor class are also @MainActor-isolated in Swift 6.
+    // Marking them `nonisolated` overrides that so they can be called from any
+    // concurrency context. They are safe because they only touch:
+    //   • UserDefaults.standard  — a thread-safe global singleton
+    //   • File-scope key constants — no actor isolation, accessible everywhere
 
-    private func checkAndResetIfNeeded() {
-        let now     = Date()
-        let _       = installDate   // ensures installDate is written on first launch
-        let period: TimeInterval = 30 * 24 * 3600
+    private nonisolated static func readInstallDate() -> Date {
+        let ud = UserDefaults.standard
+        if let saved = ud.object(forKey: scanLimitInstallKey) as? Date { return saved }
+        let now = Date()
+        ud.set(now, forKey: scanLimitInstallKey)
+        return now
+    }
 
-        // Last reset timestamp
-        let lastReset = defaults.double(forKey: resetKey)
+    private nonisolated static func checkAndResetIfNeeded() {
+        let ud  = UserDefaults.standard
+        let now = Date()
+        _ = readInstallDate()
 
+        let lastReset = ud.double(forKey: scanLimitResetKey)
         if lastReset == 0 {
-            // Never reset — record now as first cycle start
-            defaults.set(now.timeIntervalSince1970, forKey: resetKey)
+            ud.set(now.timeIntervalSince1970, forKey: scanLimitResetKey)
             return
         }
 
-        let lastResetDate = Date(timeIntervalSince1970: lastReset)
-        let timeSinceLastReset = now.timeIntervalSince(lastResetDate)
-
-        // If a full 30-day period has passed since last reset → reset
-        if timeSinceLastReset >= period {
-            defaults.set(0, forKey: scansKey)
-            defaults.set(now.timeIntervalSince1970, forKey: resetKey)
-            scansUsedThisMonth = 0
+        let elapsed = now.timeIntervalSince(Date(timeIntervalSince1970: lastReset))
+        if elapsed >= 30 * 24 * 3600 {
+            ud.set(0,                         forKey: scanLimitScansKey)
+            ud.set(now.timeIntervalSince1970, forKey: scanLimitResetKey)
         }
     }
 }

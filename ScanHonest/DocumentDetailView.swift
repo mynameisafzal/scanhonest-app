@@ -12,7 +12,6 @@ struct DocumentDetailView: View {
 
     @State private var showCustomShare  = false
     @State private var showNearbyShare  = false
-    @State private var showExportSheet  = false
     @State private var showOCRPanel     = false
     @State private var showLockAlert    = false
     @State private var showPaywall      = false
@@ -22,6 +21,16 @@ struct DocumentDetailView: View {
     @State private var showMoreMenu     = false
     @State private var currentPageIndex = 0
     @State private var showPageCount    = true
+    @State private var showFolderPicker = false   // Move to Folder
+
+    // Feedback (Toast + Snackbar)
+    @State private var feedback: FeedbackItem? = nil
+    // Holds the duplicated document so Snackbar "Review" can navigate to it
+    @State private var pendingDuplicate: ScannedDocument? = nil
+    // Holds the deleted document + URL so Snackbar "Undo" can restore it
+    @State private var deletedDocumentURL: URL? = nil
+    @State private var deletedDocument: ScannedDocument? = nil
+    @State private var feedbackDismissTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -49,11 +58,19 @@ struct DocumentDetailView: View {
                     }
                     .buttonStyle(.plain)
                     Spacer(minLength: 8)
-                    Text(document.name)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color("TextPrimary"))
-                        .lineLimit(1).truncationMode(.middle).frame(maxWidth: 180)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Title — tappable to rename directly
+                    Button {
+                        editedName = document.name
+                        isEditingName = true
+                    } label: {
+                        Text(document.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color("TextPrimary"))
+                            .lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: 180)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .buttonStyle(.plain)
                     Spacer(minLength: 8)
                     Button { showMoreMenu = true } label: {
                         Canvas { context, size in
@@ -99,9 +116,10 @@ struct DocumentDetailView: View {
             }
 
             DocActionBar(
-                isPro:    storeKitManager.isPro,
-                onShare:  { showCustomShare = true },
-                onExport: { showExportSheet = true },
+                isPro:      storeKitManager.isPro,
+                isLocked:   document.isPasswordProtected,
+                hasOCRText: document.ocrText != nil,
+                onShare: { showCustomShare = true },
                 onOCR: {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     if storeKitManager.isPro {
@@ -117,6 +135,7 @@ struct DocumentDetailView: View {
                     else { paywallTrigger = .protect; showPaywall = true }
                 }
             )
+            .padding(.bottom, 12)
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
@@ -127,18 +146,26 @@ struct DocumentDetailView: View {
         }
         .confirmationDialog("", isPresented: $showMoreMenu, titleVisibility: .hidden) {
             Button("Rename")         { editedName = document.name; isEditingName = true }
-            // Move to Folder — Pro gate
             Button(storeKitManager.isPro ? "Move to Folder" : "Move to Folder  ✦ Pro") {
                 if storeKitManager.isPro {
-                    // TODO: present FolderPickerView when built
+                    showFolderPicker = true
                 } else {
                     paywallTrigger = .folders
                     showPaywall    = true
                 }
             }
-            Button("Duplicate")      { duplicateDocument() }
-            Button("Delete", role: .destructive) { deleteDocument() }
+            Button("Duplicate") { duplicateDocument() }
+            Button("Delete", role: .destructive) { confirmDelete() }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showFolderPicker) {
+            FolderPickerView(
+                document: document,
+                isPro: storeKitManager.isPro
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
         }
         .sheet(isPresented: $showCustomShare) {
             // FIX #4: use NativeShareSheetView (Design 10B) instead of
@@ -153,15 +180,12 @@ struct DocumentDetailView: View {
                     }
                 }
             )
-            .presentationDetents([.height(560)])
-            .presentationDragIndicator(.never)
-            .presentationCornerRadius(24)
+            .presentationDetents([.fraction(0.80)])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(28)
         }
         .sheet(isPresented: $showNearbyShare) {
             NearbyShareView(document: document).presentationDetents([.large]).presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showExportSheet) {
-            ExportOptionsSheet(document: document).presentationDetents([.medium]).presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showOCRPanel) {
             OCRPanel(document: document)
@@ -173,26 +197,103 @@ struct DocumentDetailView: View {
         } message: { Text("This document is now protected with Face ID / Touch ID.") }
         .fullScreenCover(isPresented: $showPaywall) { PaywallView(triggerContext: paywallTrigger) }
         .onAppear { flashPagePill() }
+        .feedbackOverlay($feedback, onSnackbarAction: handleSnackbarAction)
     }
 
     private func flashPagePill() {
         withAnimation { showPageCount = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { withAnimation { showPageCount = false } }
+        Task { @MainActor [self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation { showPageCount = false }
+        }
     }
     private func applyRename() {
         let s = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return }
         document.name = s
     }
+
+    // MARK: - Duplicate → Snackbar "Duplicate created · Review"
     private func duplicateDocument() {
         guard let url = document.fileURL else { return }
-        let dest = url.deletingLastPathComponent().appendingPathComponent("\(UUID().uuidString).pdf")
+        let dest = url.deletingLastPathComponent()
+            .appendingPathComponent("\(UUID().uuidString).pdf")
         guard (try? FileManager.default.copyItem(at: url, to: dest)) != nil else { return }
-        let sz = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int).flatMap { Int64($0) } ?? document.fileSizeBytes
-        NotificationCenter.default.post(name: .ddDuplicate,
-            object: ScannedDocument(name: "\(document.name) copy", pageCount: document.pageCount,
-                                    fileSizeBytes: sz, fileURL: dest, thumbnailData: document.thumbnailData))
+        let sz = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? Int)
+            .flatMap { Int64($0) } ?? document.fileSizeBytes
+        let dup = ScannedDocument(
+            name: "\(document.name) copy",
+            pageCount: document.pageCount,
+            fileSizeBytes: sz,
+            fileURL: dest,
+            thumbnailData: document.thumbnailData
+        )
+        pendingDuplicate = dup
+        NotificationCenter.default.post(name: .ddDuplicate, object: dup)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        showFeedback(.snackbar(message: "Duplicate created", action: "Review",
+                               id: UUID()), autoDismiss: 3.5)
     }
+
+    // MARK: - Delete → Snackbar "Document deleted · Undo"
+    private func confirmDelete() {
+        // Snapshot before deleting so Undo can restore
+        deletedDocumentURL = document.fileURL
+        deletedDocument    = document
+        // Soft-delete: remove from SwiftData but keep file on disk temporarily
+        NotificationCenter.default.post(name: .ddDelete, object: document)
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        showFeedback(.snackbar(message: "Document deleted", action: "Undo",
+                               id: UUID()), autoDismiss: 4.0)
+        // Dismiss DocumentDetailView after a short delay so the snackbar
+        // is visible before navigation changes
+        Task { @MainActor [self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            dismiss()
+        }
+    }
+
+    // Called when the Undo/Review button in the snackbar is tapped
+    private func handleSnackbarAction() {
+        if let item = feedback {
+            switch item {
+            case .snackbar(let msg, _, _):
+                if msg == "Document deleted" {
+                    undoDelete()
+                } else if msg == "Duplicate created" {
+                    reviewDuplicate()
+                }
+            default: break
+            }
+        }
+    }
+
+    private func undoDelete() {
+        guard let doc = deletedDocument else { return }
+        // Re-insert document via ddDuplicate notification so LibraryView adds it back
+        NotificationCenter.default.post(name: .ddDuplicate, object: doc)
+        deletedDocument    = nil
+        deletedDocumentURL = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        showFeedback(.toast(message: "Restored", icon: "arrow.uturn.backward"), autoDismiss: 1.5)
+    }
+
+    private func reviewDuplicate() {
+        // The duplicate was already posted to LibraryView via ddDuplicate.
+        // Nothing else needed — user is already in the library context.
+        pendingDuplicate = nil
+    }
+
+    // MARK: - Feedback helper
+    private func showFeedback(_ item: FeedbackItem, autoDismiss: Double) {
+        feedbackDismissTask?.cancel()
+        withAnimation { feedback = item }
+        feedbackDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(autoDismiss * 1_000_000_000))
+            withAnimation { feedback = nil }
+        }
+    }
+
     private func deleteDocument() {
         if let url = document.fileURL { StorageManager.shared.deleteDocument(at: url) }
         NotificationCenter.default.post(name: .ddDelete, object: document)
@@ -205,14 +306,342 @@ struct DocumentDetailView: View {
         }
         ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
                             localizedReason: "Protect \"\(document.name)\"") { ok, _ in
-            DispatchQueue.main.async { if ok { document.isPasswordProtected = true; self.showLockAlert = true } }
+            guard ok else { return }
+            Task { @MainActor [self] in
+                document.isPasswordProtected = true
+                showLockAlert = true
+            }
         }
+    }
+}
+
+// MARK: - Toast + Snackbar (Design 12 · Feedback)
+
+/// Compact dark pill — no action, auto-dismisses.
+/// Use for: "Copied to clipboard", "Scan saved", "Link copied"
+struct DocumentToastView: View {
+    let message: String
+    var icon: String? = nil
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+            }
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            Capsule()
+                .fill(Color(red: 0.13, green: 0.13, blue: 0.14))
+                .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
+        )
+    }
+}
+
+/// Dark card with label + single action button.
+/// Use for: "Duplicate created · Review", "Document deleted · Undo"
+struct SnackbarView: View {
+    let message: String
+    let actionLabel: String
+    let onAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(message)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(actionLabel, action: onAction)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color(red: 0.45, green: 0.80, blue: 0.62)) // AccentGreen on dark
+                .padding(.leading, 16)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 0.13, green: 0.13, blue: 0.14))
+                .shadow(color: .black.opacity(0.22), radius: 16, y: 6)
+        )
+        .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - FeedbackOverlay
+//
+// Single overlay view that manages both Toast and Snackbar presentation.
+// Attach to any view with .feedbackOverlay(feedback: $feedbackState).
+
+enum FeedbackItem: Equatable {
+    case toast(message: String, icon: String?)
+    case snackbar(message: String, action: String, id: UUID)
+
+    static func == (lhs: FeedbackItem, rhs: FeedbackItem) -> Bool {
+        switch (lhs, rhs) {
+        case (.toast(let a, _), .toast(let b, _)):       return a == b
+        case (.snackbar(_, _, let a), .snackbar(_, _, let b)): return a == b
+        default: return false
+        }
+    }
+}
+
+struct FeedbackOverlayModifier: ViewModifier {
+    @Binding var item: FeedbackItem?
+    var onSnackbarAction: (() -> Void)?
+    @State private var dismissTask: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        ZStack(alignment: .bottom) {
+            content
+            if let item {
+                feedbackView(for: item)
+                    .padding(.bottom, 100) // above DocActionBar
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal:   .opacity.animation(.easeOut(duration: 0.2))
+                    ))
+                    .zIndex(999)
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: item)
+    }
+
+    @ViewBuilder
+    private func feedbackView(for item: FeedbackItem) -> some View {
+        switch item {
+        case .toast(let msg, let icon):
+            DocumentToastView(message: msg, icon: icon)
+
+        case .snackbar(let msg, let action, _):
+            SnackbarView(message: msg, actionLabel: action) {
+                withAnimation { self.item = nil }
+                onSnackbarAction?()
+            }
+        }
+    }
+}
+
+extension View {
+    func feedbackOverlay(
+        _ item: Binding<FeedbackItem?>,
+        onSnackbarAction: (() -> Void)? = nil
+    ) -> some View {
+        modifier(FeedbackOverlayModifier(item: item, onSnackbarAction: onSnackbarAction))
     }
 }
 
 extension Notification.Name {
     static let ddDuplicate = Notification.Name("ddDuplicate")
     static let ddDelete    = Notification.Name("ddDelete")
+    static let scannerShouldRestartSession = Notification.Name("scannerShouldRestartSession")
+}
+
+// MARK: - OCRPanel
+
+struct OCRPanel: View {
+    let document: ScannedDocument
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var recognizedText = ""
+    @State private var isProcessing   = false
+    @State private var errorMessage:  String?
+    @State private var showCopiedToast = false   // FIX: visible copy confirmation
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                VStack(spacing: 0) {
+                    if isProcessing && recognizedText.isEmpty {
+                        Spacer()
+                        VStack(spacing: 14) {
+                            ProgressView().scaleEffect(1.2).tint(Color("PrimaryGreen"))
+                            Text("Reading document...")
+                                .font(.system(size: 14)).foregroundColor(Color("TextMuted"))
+                        }
+                        Spacer()
+                    } else if recognizedText.isEmpty && errorMessage == nil {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            Image(systemName: "text.viewfinder")
+                                .font(.system(size: 48, weight: .ultraLight))
+                                .foregroundColor(Color("TextMuted").opacity(0.5))
+                            Text("No text found")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(Color("TextMuted"))
+                            Text("Tap \"Scan Text\" to extract text using OCR")
+                                .font(.system(size: 13))
+                                .foregroundColor(Color("TextMuted").opacity(0.7))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                        }
+                        Spacer()
+                    } else {
+                        TextEditor(text: $recognizedText)
+                            .font(.system(size: 15))
+                            .foregroundColor(Color("TextPrimary"))
+                            .scrollContentBackground(.hidden)
+                            .background(Color("Background"))
+                            .padding(16)
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 13)).foregroundColor(.red)
+                            .padding(.horizontal, 20).padding(.bottom, 12)
+                    }
+
+                    // Bottom action row
+                    HStack(spacing: 12) {
+                        // COPY button — copies text and shows green toast
+                        Button {
+                            guard !recognizedText.isEmpty else { return }
+                            UIPasteboard.general.string = recognizedText
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                showCopiedToast = true
+                            }
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                withAnimation { showCopiedToast = false }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Copy")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(recognizedText.isEmpty
+                                ? Color("Hairline") : Color("PrimaryGreen"))
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                        }
+                        .disabled(recognizedText.isEmpty || isProcessing)
+                        .buttonStyle(.plain)
+
+                        // SCAN TEXT button — re-runs Vision OCR
+                        // PURPOSE: re-run if first scan returned empty/garbled text,
+                        // or after user applies a filter that improves contrast.
+                        Button {
+                            runOCR()
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isProcessing {
+                                    ProgressView().scaleEffect(0.75).tint(.white)
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 14, weight: .medium))
+                                }
+                                Text("Scan Text")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(isProcessing ? Color("AccentGreen").opacity(0.6) : Color("AccentGreen"))
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                        }
+                        .disabled(isProcessing)
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                    .padding(.top, 8)
+                }
+                .background(Color("Background").ignoresSafeArea())
+
+                // “Copied!” toast — slides up from bottom, auto-dismisses after 1.5s
+                if showCopiedToast {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white)
+                            Text("Copied!")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color("PrimaryGreen"))
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+                        .padding(.bottom, 80)  // above the button row
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal:   .opacity
+                        ))
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+            .navigationTitle("OCR Text")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }.foregroundColor(Color("TextMuted"))
+                }
+            }
+            .onAppear {
+                recognizedText = document.ocrText ?? ""
+                if recognizedText.isEmpty { runOCR() }
+            }
+        }
+    }
+
+    private func runOCR() {
+        guard !isProcessing else { return }
+        guard let url = document.fileURL else {
+            errorMessage = "Document file is unavailable."; return
+        }
+        isProcessing = true; errorMessage = nil
+        Task { @MainActor in
+            do {
+                let images = try renderImages(from: url)
+                let text   = try await OCRProcessor.shared.extractText(fromPDFPages: images)
+                recognizedText    = text
+                document.ocrText  = text
+                document.dateModified = Date()
+                if text.isEmpty { errorMessage = "No text was found in this document." }
+            } catch {
+                errorMessage = "OCR failed: \(error.localizedDescription)"
+            }
+            isProcessing = false
+        }
+    }
+
+    private func renderImages(from url: URL) throws -> [UIImage] {
+        guard let pdfDocument = StorageManager.shared.loadPDF(from: url) else {
+            throw OCRError.processingFailed
+        }
+        var images: [UIImage] = []
+        for i in 0..<pdfDocument.pageCount {
+            guard let page = pdfDocument.page(at: i) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let format = UIGraphicsImageRendererFormat.default(); format.scale = 2
+            let image  = UIGraphicsImageRenderer(size: bounds.size, format: format).image { ctx in
+                UIColor.white.setFill()
+                ctx.fill(CGRect(origin: .zero, size: bounds.size))
+                ctx.cgContext.translateBy(x: -bounds.minX, y: bounds.height + bounds.minY)
+                ctx.cgContext.scaleBy(x: 1, y: -1)
+                page.draw(with: .mediaBox, to: ctx.cgContext)
+            }
+            images.append(image)
+        }
+        guard !images.isEmpty else { throw OCRError.processingFailed }
+        return images
+    }
 }
 
 // MARK: - CustomShareSheet
@@ -449,11 +878,7 @@ struct CustomShareSheet: View {
         VStack(spacing: 0) {
             // Header — tapping anywhere on the row expands / collapses
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(Color("AccentSoft")).frame(width: 44, height: 44)
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 18, weight: .medium)).foregroundColor(Color("PrimaryGreen"))
-                }
+                SHIconBadge(systemName: "lock.fill", size: 44, iconSize: 18, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text("Password Protect")
@@ -525,11 +950,7 @@ struct CustomShareSheet: View {
             )
         } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(Color("AccentSoft")).frame(width: 44, height: 44)
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 20, weight: .medium)).foregroundColor(Color("PrimaryGreen"))
-                }
+                SHIconBadge(systemName: "antenna.radiowaves.left.and.right", size: 44, iconSize: 20, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Nearby Share").font(.system(size: 15, weight: .semibold)).foregroundColor(Color("TextPrimary"))
                     Text("Share securely with nearby ScanHonest users").font(.system(size: 12)).foregroundColor(Color("TextMuted"))
@@ -545,11 +966,7 @@ struct CustomShareSheet: View {
     private var printRow: some View {
         Button { handlePrint() } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12).fill(Color("AccentSoft")).frame(width: 44, height: 44)
-                    Image(systemName: "printer.fill")
-                        .font(.system(size: 18, weight: .medium)).foregroundColor(Color("PrimaryGreen"))
-                }
+                SHIconBadge(systemName: "printer.fill", size: 44, iconSize: 18, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Print").font(.system(size: 15, weight: .semibold)).foregroundColor(Color("TextPrimary"))
                     Text("Send to AirPrint printer").font(.system(size: 12)).foregroundColor(Color("TextMuted"))
@@ -681,53 +1098,120 @@ struct PDFViewerRepresentable: UIViewRepresentable {
         }
         @objc func pageChanged(_ n: Notification) {
             guard let v = n.object as? PDFView, let page = v.currentPage, let doc = v.document else { return }
-            DispatchQueue.main.async { self.currentPage.wrappedValue = doc.index(for: page); self.onPageChange?() }
+            let idx = doc.index(for: page)
+            Task { @MainActor in
+                self.currentPage.wrappedValue = idx
+                self.onPageChange?()
+            }
         }
     }
 }
 
 // MARK: - DocActionBar
+//
+// Changes from audit:
+//   1. Export removed — Share already includes PDF/JPEG/Compress/TXT
+//   2. Lock shows locked/unlocked state visually
+//   3. OCR shows green dot when text is already extracted
+//   4. PRO badge uses .overlay instead of .offset to prevent clipping
+//   5. Bottom padding uses safeAreaInsets via GeometryReader
 
 struct DocActionBar: View {
-    let isPro: Bool
-    let onShare: () -> Void; let onExport: () -> Void
-    let onOCR: () -> Void;   let onLock:  () -> Void
+    let isPro:        Bool
+    let isLocked:     Bool      // shows filled green lock when true
+    let hasOCRText:   Bool      // shows green dot on OCR button when true
+    let onShare:  () -> Void
+    let onOCR:    () -> Void
+    let onLock:   () -> Void
+
     var body: some View {
         HStack(spacing: 0) {
-            DocActionBtn(icon: .share, label: "Share",  pro: false,  action: onShare)
-                .accessibilityIdentifier("shareButton")
-            DocActionBtn(icon: .pdf,   label: "Export", pro: false,  action: onExport)
-                .accessibilityIdentifier("exportButton")
-            DocActionBtn(icon: .text,  label: "OCR",    pro: !isPro, action: onOCR)
-                .accessibilityIdentifier("ocrButton")
-            DocActionBtn(icon: .lock,  label: "Lock",   pro: !isPro, action: onLock)
-                .accessibilityIdentifier("lockButton")
+            // Share — primary action, always enabled
+            DocActionBtn(
+                icon: .share,
+                label: "Share",
+                pro: false,
+                isActive: false,
+                badge: nil,
+                action: onShare
+            )
+            .accessibilityIdentifier("shareButton")
+
+            // OCR — Pro gated, green dot if text already extracted
+            DocActionBtn(
+                icon: .text,
+                label: "OCR",
+                pro: !isPro,
+                isActive: false,
+                badge: hasOCRText ? .dot : nil,
+                action: onOCR
+            )
+            .accessibilityIdentifier("ocrButton")
+
+            // Lock — shows active state when document is locked
+            DocActionBtn(
+                icon: .lock,
+                label: isLocked ? "Locked" : "Lock",
+                pro: !isPro,
+                isActive: isLocked,
+                badge: nil,
+                action: onLock
+            )
+            .accessibilityIdentifier("lockButton")
         }
         .padding(.horizontal, 8).padding(.vertical, 14)
         .background(Color("Surface")).cornerRadius(20)
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color("Hairline"), lineWidth: 1))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
-        .padding(.horizontal, 16).padding(.bottom, 12)
+        .padding(.horizontal, 16)
     }
 }
 
+private enum DocBadge { case dot }
 private enum DetailActionIcon { case share, pdf, text, lock }
 
 private struct DocActionBtn: View {
-    let icon: DetailActionIcon; let label: String; let pro: Bool; let action: () -> Void
+    let icon:     DetailActionIcon
+    let label:    String
+    let pro:      Bool
+    let isActive: Bool          // filled/green when true (used for Lock)
+    let badge:    DocBadge?     // green dot for OCR extracted state
+    let action:   () -> Void
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 ZStack(alignment: .topTrailing) {
-                    DetailActionGlyph(icon: icon, color: Color("PrimaryGreen")).frame(height: 28)
+                    DetailActionGlyph(
+                        icon: icon,
+                        color: isActive ? Color("AccentGreen") : Color("PrimaryGreen")
+                    )
+                    .frame(width: 26, height: 26)
+
+                    // PRO badge — uses overlay alignment, no offset clipping
                     if pro {
-                        Text("PRO").font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white).tracking(0.4)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Color("Gold")).cornerRadius(3).offset(x: 18, y: -6)
+                        Text("PRO")
+                            .font(.system(size: 7, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white).tracking(0.3)
+                            .padding(.horizontal, 4).padding(.vertical, 1.5)
+                            .background(Color("Gold"))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .offset(x: 14, y: -6)
+                    }
+
+                    // Green dot — OCR text available
+                    if badge == .dot {
+                        Circle()
+                            .fill(Color("AccentGreen"))
+                            .frame(width: 7, height: 7)
+                            .offset(x: 10, y: -4)
                     }
                 }
-                Text(label).font(.system(size: 10.5, weight: .medium)).foregroundColor(Color("TextMuted"))
+                .frame(width: 32, height: 32)
+
+                Text(label)
+                    .font(.system(size: 10.5, weight: isActive ? .semibold : .medium))
+                    .foregroundColor(isActive ? Color("AccentGreen") : Color("TextMuted"))
             }
             .frame(maxWidth: .infinity).contentShape(Rectangle())
         }
