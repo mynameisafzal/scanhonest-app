@@ -1076,6 +1076,11 @@ struct CustomShareSheet: View {
 
 // MARK: - PDF Viewer
 
+private struct UncheckedSendableObject: @unchecked Sendable {
+    let value: Any?
+    init(_ value: Any?) { self.value = value }
+}
+
 struct PDFViewerRepresentable: UIViewRepresentable {
     let url: URL; @Binding var currentPage: Int; var onPageChange: (() -> Void)?
     func makeUIView(context: Context) -> PDFView {
@@ -1091,15 +1096,16 @@ struct PDFViewerRepresentable: UIViewRepresentable {
     }
     func updateUIView(_ uiView: PDFView, context: Context) {}
     func makeCoordinator() -> Coordinator { Coordinator(currentPage: $currentPage, onPageChange: onPageChange) }
-    class Coordinator: NSObject {
+    final class Coordinator: NSObject, @unchecked Sendable {
         var currentPage: Binding<Int>; var onPageChange: (() -> Void)?
         init(currentPage: Binding<Int>, onPageChange: (() -> Void)?) {
             self.currentPage = currentPage; self.onPageChange = onPageChange
         }
         @objc func pageChanged(_ n: Notification) {
-            guard let v = n.object as? PDFView, let page = v.currentPage, let doc = v.document else { return }
-            let idx = doc.index(for: page)
+            let boxed = UncheckedSendableObject(n.object)
             Task { @MainActor in
+                guard let v = boxed.value as? PDFView, let page = v.currentPage, let doc = v.document else { return }
+                let idx = doc.index(for: page)
                 self.currentPage.wrappedValue = idx
                 self.onPageChange?()
             }

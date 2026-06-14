@@ -2,6 +2,21 @@ import SwiftUI
 @preconcurrency import PDFKit
 import PhotosUI
 
+private struct UncheckedSendableImages: @unchecked Sendable {
+    let images: [UIImage]
+    init(_ images: [UIImage]) { self.images = images }
+}
+
+private final class FilterProcessingGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    func shouldShowProcessing() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !cancelled
+    }
+}
+
 // MARK: - ScanReviewView
 
 struct ScanReviewView: View {
@@ -285,13 +300,17 @@ struct ScanReviewView: View {
 
     private func applyFilter(_ filter: ScanFilter) {
         guard !baseImages.isEmpty else { return }
-        let gate = DispatchWorkItem { withAnimation { isFilterProcessing = true } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: gate)
+        let gate = FilterProcessingGate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            if gate.shouldShowProcessing() {
+                withAnimation { isFilterProcessing = true }
+            }
+        }
         pushUndo(); selectedFilter = filter
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        let snapshot = baseImages
+        let snapshot = UncheckedSendableImages(baseImages)
         Task.detached(priority: .userInitiated) {
-            let filtered = snapshot.map { ScanFilterProcessor.apply(filter, to: $0) }
+            let filtered = snapshot.images.map { ScanFilterProcessor.apply(filter, to: $0) }
             await MainActor.run {
                 gate.cancel()
                 withAnimation { isFilterProcessing = false }
@@ -334,9 +353,10 @@ struct ScanReviewView: View {
     private func appendImages(_ newImages: [UIImage]) {
         pushUndo()
         let filter = selectedFilter
+        let incoming = UncheckedSendableImages(newImages)
         Task.detached(priority: .userInitiated) {
-            let filtered = newImages.map { ScanFilterProcessor.apply(filter, to: $0) }
-            let thumbs   = newImages
+            let filtered = incoming.images.map { ScanFilterProcessor.apply(filter, to: $0) }
+            let thumbs   = incoming.images
             await MainActor.run {
                 baseImages.append(contentsOf: thumbs)
                 processedImages.append(contentsOf: filtered)
@@ -724,19 +744,32 @@ struct MultiImagePicker: UIViewControllerRepresentable {
         private let onPick: ([UIImage]) -> Void
         init(onPick: @escaping ([UIImage]) -> Void) { self.onPick = onPick }
 
+        private final class ImageLoadBuffer: @unchecked Sendable {
+            private var slots: [UIImage?]
+            private let lock = NSLock()
+            init(count: Int) { slots = Array(repeating: nil, count: count) }
+            func store(_ image: UIImage?, at index: Int) {
+                lock.lock()
+                defer { lock.unlock() }
+                slots[index] = image
+            }
+            var results: [UIImage] { slots.compactMap { $0 } }
+        }
+
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true)
             guard !results.isEmpty else { onPick([]); return }
-            var images = [UIImage?](repeating: nil, count: results.count)
+            let buffer = ImageLoadBuffer(count: results.count)
             let group  = DispatchGroup()
             for (i, result) in results.enumerated() {
                 guard result.itemProvider.canLoadObject(ofClass: UIImage.self) else { continue }
                 group.enter()
                 result.itemProvider.loadObject(ofClass: UIImage.self) { obj, _ in
-                    defer { group.leave() }; images[i] = obj as? UIImage
+                    defer { group.leave() }
+                    buffer.store(obj as? UIImage, at: i)
                 }
             }
-            group.notify(queue: .main) { self.onPick(images.compactMap { $0 }) }
+            group.notify(queue: .main) { self.onPick(buffer.results) }
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 import StoreKit
 import UserNotifications
-import MessageUI
+@preconcurrency import MessageUI
 import LocalAuthentication
 
 // MARK: - UserPlan
@@ -522,8 +522,9 @@ struct SettingsView: View {
     private func handleNotificationToggle(_ enable: Bool) {
         if enable {
             UNUserNotificationCenter.current().getNotificationSettings { settings in
+                let status = settings.authorizationStatus
                 Task { @MainActor [self] in
-                    switch settings.authorizationStatus {
+                    switch status {
                     case .notDetermined:
                         NotificationManager.shared.requestAuthorization { granted in
                             notificationsEnabled = granted
@@ -534,7 +535,7 @@ struct SettingsView: View {
                         showToast(.error("Enable notifications in iOS Settings \u{2192} ScanHonest"))
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
                         if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
+                            await UIApplication.shared.open(url)
                         }
                     case .authorized, .provisional, .ephemeral:
                         UserDefaults.standard.set(true, forKey: "notificationsEnabled")
@@ -618,13 +619,15 @@ struct MailComposerView: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(completion: completion) }
 
-    class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+    @MainActor
+    final class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
         let completion: (MFMailComposeResult) -> Void
         init(completion: @escaping (MFMailComposeResult) -> Void) { self.completion = completion }
 
         func mailComposeController(_ controller: MFMailComposeViewController,
                                    didFinishWith result: MFMailComposeResult, error: Error?) {
-            controller.dismiss(animated: true) { self.completion(result) }
+            completion(result)
+            controller.dismiss(animated: true)
         }
     }
 }

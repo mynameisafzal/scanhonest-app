@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import MultipeerConnectivity
+@preconcurrency import MultipeerConnectivity
 import PDFKit
 import UIKit
 import os.log
@@ -52,9 +52,9 @@ struct IncomingTransferRequest {
     let peer: MCPeerID
     let fileName: String
     let fileSizeBytes: Int64
-    // Callbacks are @Sendable so they can be called from any context safely
-    var accept:  @Sendable () -> Void
-    var decline: @Sendable () -> Void
+    // Called only from @MainActor (acceptIncoming / declineIncoming).
+    var accept:  () -> Void
+    var decline: () -> Void
 }
 
 // MARK: - NearbyShareManager
@@ -93,6 +93,8 @@ final class NearbyShareManager: NSObject, ObservableObject, @unchecked Sendable 
     private var pendingSendURL:  URL?
     private var pendingSendName: String?
     private var pendingSendPeer: MCPeerID?
+    /// Peer that sent the current "offer" message — used by accept/decline responses.
+    private var pendingOfferPeer: MCPeerID?
     private var pendingProgress: Progress?
 
     private var connectTimeoutTask:  Task<Void, Never>?
@@ -181,6 +183,7 @@ final class NearbyShareManager: NSObject, ObservableObject, @unchecked Sendable 
         pendingSendURL  = nil
         pendingSendName = nil
         pendingSendPeer = nil
+        pendingOfferPeer = nil
         if phase != .idle { phase = .idle }
         logger.info("Disconnected and cleaned up")
     }
@@ -340,6 +343,15 @@ final class NearbyShareManager: NSObject, ObservableObject, @unchecked Sendable 
 
     // MARK: - Helpers
 
+    private func sendOfferResponse(accepted: Bool) {
+        guard let peerID = pendingOfferPeer else { return }
+        pendingOfferPeer = nil
+        let resp: [String: Any] = ["type": accepted ? "accept" : "decline"]
+        if let data = try? JSONSerialization.data(withJSONObject: resp) {
+            try? session?.send(data, toPeers: [peerID], with: .reliable)
+        }
+    }
+
     private func updatePeerState(_ peerID: MCPeerID, state: NearbyPeer.PeerState) {
         guard let i = discoveredPeers.firstIndex(where: { $0.id == peerID }) else { return }
         discoveredPeers[i].state = state
@@ -442,31 +454,17 @@ extension NearbyShareManager: MCSessionDelegate {
                 let name = json["name"] as? String ?? "Document"
                 let size = json["size"] as? Int64 ?? 0
 
-                // Capture session on MainActor NOW so the @Sendable closures
-                // below can safely reference it without crossing actor boundaries.
-                let capturedSession = self.session
+                pendingOfferPeer = peerID
 
                 incomingRequest = IncomingTransferRequest(
                     peer: peerID,
                     fileName: name,
                     fileSizeBytes: size,
                     accept: { [weak self] in
-                        let resp: [String: Any] = ["type": "accept"]
-                        if let d = try? JSONSerialization.data(withJSONObject: resp) {
-                            try? capturedSession?.send(d, toPeers: [peerID], with: .reliable)
-                        }
-                        Task { @MainActor [weak self] in
-                            self?.phase = .receiving(progress: 0)
-                        }
+                        self?.sendOfferResponse(accepted: true)
                     },
                     decline: { [weak self] in
-                        let resp: [String: Any] = ["type": "decline"]
-                        if let d = try? JSONSerialization.data(withJSONObject: resp) {
-                            try? capturedSession?.send(d, toPeers: [peerID], with: .reliable)
-                        }
-                        Task { @MainActor [weak self] in
-                            self?.phase = .idle
-                        }
+                        self?.sendOfferResponse(accepted: false)
                     }
                 )
 

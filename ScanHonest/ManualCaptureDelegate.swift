@@ -40,7 +40,7 @@ import UIKit
 
 // MARK: - ManualCaptureDelegate
 
-final class ManualCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+final class ManualCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
 
     // MARK: - Typed error
 

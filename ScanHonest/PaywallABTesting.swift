@@ -7,6 +7,7 @@
 #if !WIDGET_EXTENSION
 
 import Foundation
+import UIKit
 
 // MARK: - PaywallVariant
 

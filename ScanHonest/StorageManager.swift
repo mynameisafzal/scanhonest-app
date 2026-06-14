@@ -80,19 +80,20 @@ final class StorageManager: @unchecked Sendable {
         // Capture only Sendable values needed inside Task.detached.
         // targetURL, iCloud, cloudURL, logger are all Sendable.
         // localDocumentsURL is URL (Sendable) — captured directly as targetURL.
+        // PDFDocument is not Sendable — serialize on the caller thread before
+        // crossing into Task.detached. Encryption + file I/O still run off-thread.
+        guard let pdfData = pdfDocument.dataRepresentation() else {
+            logger.error("savePDF: dataRepresentation() nil for '\(name)'")
+            return nil
+        }
+
         let targetURL   = localDocumentsURL.appendingPathComponent("\(UUID().uuidString).pdf")
         let iCloud      = iCloudEnabled
         let cloudURL    = iCloudURL
         let logger      = self.logger
 
         return await Task.detached(priority: .userInitiated) {
-            // 1. Serialise PDF — CPU-heavy, proportional to page count
-            guard let pdfData = pdfDocument.dataRepresentation() else {
-                logger.error("savePDF: dataRepresentation() nil for '\(name)'")
-                return nil
-            }
-
-            // 2. AES-256-GCM encrypt + atomic write to disk
+            // 1. AES-256-GCM encrypt + atomic write to disk
             do {
                 try DocumentEncryptionManager.shared.writeEncrypted(pdfData, to: targetURL)
             } catch {

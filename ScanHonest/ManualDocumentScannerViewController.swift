@@ -71,6 +71,27 @@ enum ScannerCaptureFilter {
     case original
 }
 
+// Dedicated CIContext for off-main thumbnail generation (file scope = nonisolated).
+private let scannerThumbnailCIContext = CIContext(options: [
+    .useSoftwareRenderer: false,
+    .priorityRequestLow:   false,
+    .cacheIntermediates:   false,
+])
+
+private struct UncheckedSendablePixelBuffer: @unchecked Sendable {
+    let buffer: CVPixelBuffer
+    init(_ buffer: CVPixelBuffer) { self.buffer = buffer }
+}
+
+private func makeScannerThumbnail(from pb: CVPixelBuffer, targetSize: CGSize) -> UIImage? {
+    let ci    = CIImage(cvPixelBuffer: pb).oriented(.right)
+    let scale = min(targetSize.width / ci.extent.width,
+                    targetSize.height / ci.extent.height)
+    let scaled = ci.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+    guard let cg = scannerThumbnailCIContext.createCGImage(scaled, from: scaled.extent) else { return nil }
+    return UIImage(cgImage: cg)
+}
+
 // MARK: - ManualDocumentScannerViewController
 
 final class ManualDocumentScannerViewController: UIViewController {
@@ -85,9 +106,11 @@ final class ManualDocumentScannerViewController: UIViewController {
     }
 
     // MARK: AVFoundation
-    private let session      = AVCaptureSession()
-    private let photoOutput  = AVCapturePhotoOutput()
-    private let videoOutput  = AVCaptureVideoDataOutput()
+    // Owned exclusively by sessionQueue — nonisolated(unsafe) opts out of
+    // @MainActor UIViewController isolation for strict-concurrency compliance.
+    nonisolated(unsafe) private let session      = AVCaptureSession()
+    nonisolated(unsafe) private let photoOutput  = AVCapturePhotoOutput()
+    nonisolated(unsafe) private let videoOutput  = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "mds.session", qos: .userInitiated)
     // Elevated to .userInteractive so Vision pre-empts background work and delivers
     // detection results before the next camera frame arrives.
@@ -107,7 +130,7 @@ final class ManualDocumentScannerViewController: UIViewController {
     nonisolated(unsafe) private var _pendingObservation:   VNRectangleObservation? = nil
     nonisolated(unsafe) private var _pendingNoDetection:   Bool = false
     /// Stored during setupSession; used to query max photo dimensions on iOS 16+.
-    private var captureDevice: AVCaptureDevice?
+    nonisolated(unsafe) private var captureDevice: AVCaptureDevice?
 
     // MARK: Vision kill-switch
     // Written on the main thread (in applyStateTransition) and read on visionQueue.
@@ -1045,13 +1068,10 @@ extension ManualDocumentScannerViewController {
 
         if let pb = latestPixelBuffer {
             let thumbTarget = CGSize(width: thumbSize * 2, height: thumbSize * 3)
-            // Task.detached for thumbnail generation — off main thread.
-            // Capture only Sendable values (CGSize, Int) to avoid
-            // non-Sendable ManualDocumentScannerViewController capture.
-            Task.detached(priority: .userInitiated) { [weak self] in
-                guard let self else { return }
-                let placeholder = self.makeThumbnailImage(from: pb, targetSize: thumbTarget)
-                await MainActor.run { [weak self] in
+            let pixelBuffer = UncheckedSendablePixelBuffer(pb)
+            processingQueue.async { [weak self] in
+                let placeholder = makeScannerThumbnail(from: pixelBuffer.buffer, targetSize: thumbTarget)
+                Task { @MainActor [weak self] in
                     self?.insertThumbnail(image: placeholder, atIndex: pendingIndex)
                 }
             }
@@ -1209,15 +1229,6 @@ extension ManualDocumentScannerViewController {
         UIView.animate(withDuration: 0.22, animations: { backdrop.alpha = 0 }) { _ in
             backdrop.removeFromSuperview()
         }
-    }
-
-    private func makeThumbnailImage(from pb: CVPixelBuffer, targetSize: CGSize) -> UIImage? {
-        let ci    = CIImage(cvPixelBuffer: pb).oriented(.right)
-        let scale = min(targetSize.width / ci.extent.width,
-                        targetSize.height / ci.extent.height)
-        let scaled = ci.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        guard let cg = ciContext.createCGImage(scaled, from: scaled.extent) else { return nil }
-        return UIImage(cgImage: cg)
     }
 }
 
